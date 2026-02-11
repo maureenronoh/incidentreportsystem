@@ -1,0 +1,308 @@
+/* Mobile-first responsive design for iReporter */
+
+/* Desktop-only elements */
+.desktop-only {
+  display: block;
+}
+
+@media screen and (max-width: 768px) {
+  .desktop-only {
+    display: none !important;
+  }
+}
+
+/* Base mobile styles */
+@media screen and (max-width: 768px) {
+  /* General mobile optimizations */
+  * {
+    box-sizing: border-box;
+  }
+  
+  body {
+    margin: 0;
+    padding: 0;
+    font-size: 16px; /* Prevent zoom on iOS */
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+  }
+  
+  /* Touch-friendly buttons */
+  button, .button {
+    min-height: 44px; /* iOS recommended touch target */
+    min-width: 44px;
+    padding: 12px 20px;
+    font-size: 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: rgba(0,0,0,0.1);
+  }
+  
+  /* Form inputs */
+  input, textarea, select {
+    min-height: 44px;
+    padding: 12px 16px;
+    font-size: 16px; /* Prevent zoom on iOS */
+    border-radius: 8px;
+    border: 2px solid #e1e5e9;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+  
+  /* Cards and containers */
+  .card, .container {
+    margin: 10px;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  
+  /* Navigation */
+  .nav-mobile {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 1px solid #e9ecef;
+    padding: 10px;
+    display: flex;
+    justify-content: space-around;
+    z-index: 1000;
+  }
+  
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px;
+    text-decoration: none;
+    color: #6c757d;
+    font-size: 12px;
+    min-width: 60px;
+  }
+  
+  .nav-item.active {
+    color: #667eea;
+  }
+  
+  .nav-icon {
+    font-size: 20px;
+    margin-bottom: 4px;
+  }
+  
+  /* Dashboard mobile layout */
+  .dashboard-mobile {
+    padding-bottom: 80px; /* Space for bottom nav */
+  }
+  
+  .stats-grid-mobile {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 20px;
+  }
+  
+  .stat-card-mobile {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  
+  /* Incident list mobile */
+  .incident-list-mobile {
+    padding: 10px;
+    padding-bottom: 80px;
+  }
+  
+  .incident-card-mobile {
+    background: white;
+    margin-bottom: 15px;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  
+  .incident-actions-mobile {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 15px;
+  }
+  
+  .incident-action-btn {
+    flex: 1;
+    min-width: 80px;
+    padding: 8px 12px;
+    font-size: 14px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  
+  /* Form mobile layout */
+  .form-mobile {
+    padding: 20px;
+    padding-bottom: 80px;
+  }
+  
+  .form-group-mobile {
+    margin-bottom: 20px;
+  }
+  
+  .form-label-mobile {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #333;
+  }
+  
+  /* Modal mobile */
+  .modal-mobile {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: flex-end;
+    z-index: 2000;
+  }
+  
+  .modal-content-mobile {
+    background: white;
+    width: 100%;
+    max-height: 80vh;
+    border-radius: 20px 20px 0 0;
+    padding: 20px;
+    overflow-y: auto;
+  }
+  
+  /* Pull-to-refresh indicator */
+  .pull-to-refresh {
+    text-align: center;
+    padding: 20px;
+    color: #667eea;
+    font-size: 14px;
+  }
+  
+  /* Loading states */
+  .loading-mobile {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 40px;
+  }
+  
+  .spinner-mobile {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  
+  /* Floating action button */
+  .fab {
+    position: fixed;
+    bottom: 90px; /* Above bottom nav */
+    right: 20px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: #667eea;
+    color: white;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    z-index: 999;
+  }
+  
+  .fab:hover {
+    background: #5a6fd8;
+    transform: scale(1.1);
+  }
+  
+  /* Toast notifications mobile */
+  .toast-mobile {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    right: 20px;
+    background: #333;
+    color: white;
+    padding: 16px;
+    border-radius: 8px;
+    z-index: 3000;
+  }
+  
+  /* Swipe gestures */
+  .swipeable {
+    touch-action: pan-y;
+  }
+  
+  /* Safe area for iPhone X+ */
+  @supports (padding: max(0px)) {
+    .safe-area-bottom {
+      padding-bottom: max(20px, env(safe-area-inset-bottom));
+    }
+    
+    .safe-area-top {
+      padding-top: max(20px, env(safe-area-inset-top));
+    }
+  }
+}
+
+/* Tablet styles */
+@media screen and (min-width: 769px) and (max-width: 1024px) {
+  .stats-grid-mobile {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .incident-actions-mobile {
+    justify-content: flex-start;
+  }
+  
+  .incident-action-btn {
+    flex: none;
+    min-width: 100px;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .card, .container {
+    background: #2d3748;
+    color: white;
+  }
+  
+  .nav-mobile {
+    background: #2d3748;
+    border-top-color: #4a5568;
+  }
+  
+  input, textarea, select {
+    background: #4a5568;
+    color: white;
+    border-color: #718096;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
