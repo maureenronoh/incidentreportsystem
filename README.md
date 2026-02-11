@@ -227,7 +227,7 @@ For support and questions:
 
 ## 👥 Authors
 
-- Your Name - Initial work
+Maureen Ronoh
 
 ## 🙏 Acknowledgments
 
