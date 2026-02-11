@@ -214,6 +214,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For support and questions:
 - Create an issue on GitHub
 - Check the [Help page](docs/) in the application
+- email (maureenjepkirui25@gmail.com)
 
 ## 🎯 Roadmap
 
@@ -225,7 +226,7 @@ For support and questions:
 - [ ] Multi-language support
 - [ ] Real-time updates with WebSockets
 
-## 👥 Authors
+## 👥 Author
 
 Maureen Ronoh
 
