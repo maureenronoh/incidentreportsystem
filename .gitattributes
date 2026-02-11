@@ -1,0 +1,26 @@
+# GitHub language statistics configuration
+
+# Mark Python as the primary language
+*.py linguist-detectable=true
+*.py linguist-language=Python
+
+# Reduce weight of frontend files
+*.js linguist-detectable=false
+*.jsx linguist-detectable=false
+*.css linguist-detectable=false
+*.html linguist-detectable=false
+
+# Exclude generated/vendor files from language stats
+ireporter-frontend/build/* linguist-generated=true
+ireporter-frontend/node_modules/* linguist-vendored=true
+venv/* linguist-vendored=true
+*.min.js linguist-generated=true
+*.min.css linguist-generated=true
+
+# Documentation
+*.md linguist-documentation=true
+docs/* linguist-documentation=true
+
+# Configuration files
+*.json linguist-detectable=false
+*.lock linguist-generated=true
