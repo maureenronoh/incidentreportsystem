@@ -244,7 +244,6 @@ Include screenshots for UI changes
 
 - **Documentation**: Check the `/docs` folder
 - **Issues**: Search existing GitHub issues
-- **Questions**: Open a GitHub discussion
 - **API Help**: Visit http://localhost:5000/api/help
 
 Thank you for contributing to iReporter! 🎉
