@@ -2,12 +2,16 @@ services:
   - type: web
     name: ireporter-backend
     env: python
+    region: oregon
+    plan: free
     buildCommand: pip install -r requirements_simple.txt
     startCommand: python backend_complete_simple.py
     envVars:
       - key: MONGODB_URI
-        value: mongodb://localhost:27017/ireporter
+        sync: false
       - key: PORT
         value: 5001
       - key: JWT_SECRET_KEY
         generateValue: true
+      - key: PYTHON_VERSION
+        value: 3.11.0
