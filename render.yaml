@@ -1,17 +1,19 @@
 services:
   - type: web
     name: ireporter-backend
-    env: python
+    runtime: python
     region: oregon
     plan: free
-    buildCommand: pip install -r requirements_simple.txt
+    branch: main
+    buildCommand: pip install --upgrade pip && pip install -r requirements_simple.txt
     startCommand: python backend_complete_simple.py
     envVars:
       - key: MONGODB_URI
         sync: false
       - key: PORT
-        value: 5001
+        value: "5001"
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: PYTHON_VERSION
-        value: 3.11.0
+        value: "3.11.0"
+    healthCheckPath: /
