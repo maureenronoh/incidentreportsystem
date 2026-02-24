@@ -256,7 +256,7 @@ const ViewIncident = () => {
                   borderRadius: '10px',
                   fontSize: '11px'
                 }}>
-                  ID: {incident.user_id}
+                  Reporter ID: {incident.user_id}
                 </span>
               )}
             </span>

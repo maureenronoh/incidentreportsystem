@@ -244,6 +244,79 @@ def get_current_user():
         print(f"Get current user error: {e}")
         return jsonify({"error": str(e)}), 500
 
+# Admin endpoints
+@app.route('/api/admin/users', methods=['GET', 'OPTIONS'])
+@jwt_required()
+def get_all_users():
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    try:
+        current_user_id = get_jwt_identity()
+        current_user = find_user_by_id(current_user_id)
+        
+        # Check if user is admin
+        if not current_user or current_user.get('role') != 'admin':
+            return jsonify({"error": "Admin access required"}), 403
+        
+        # Get all users
+        users = list(users_collection.find())
+        
+        # Remove passwords and serialize
+        users_response = []
+        for user in users:
+            user_data = serialize_doc(user.copy())
+            if 'password' in user_data:
+                del user_data['password']
+            users_response.append(user_data)
+        
+        return jsonify(users_response), 200
+        
+    except Exception as e:
+        print(f"Get all users error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/users/<user_id>/role', methods=['PATCH', 'OPTIONS'])
+@jwt_required()
+def update_user_role(user_id):
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    try:
+        current_user_id = get_jwt_identity()
+        current_user = find_user_by_id(current_user_id)
+        
+        # Check if user is admin
+        if not current_user or current_user.get('role') != 'admin':
+            return jsonify({"error": "Admin access required"}), 403
+        
+        data = request.get_json()
+        new_role = data.get('role')
+        
+        if new_role not in ['user', 'admin']:
+            return jsonify({"error": "Invalid role. Must be 'user' or 'admin'"}), 400
+        
+        # Find user to update
+        user_to_update = find_user_by_id(user_id)
+        if not user_to_update:
+            return jsonify({"error": "User not found"}), 404
+        
+        # Update user role
+        users_collection.update_one(
+            {'_id': ObjectId(user_id)},
+            {'$set': {'role': new_role}}
+        )
+        
+        return jsonify({
+            "message": f"User role updated to {new_role}",
+            "user_id": user_id,
+            "new_role": new_role
+        }), 200
+        
+    except Exception as e:
+        print(f"Update user role error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/incidents', methods=['GET', 'POST', 'OPTIONS'])
 @jwt_required()
 def incidents():
@@ -645,6 +718,8 @@ if __name__ == '__main__':
     print("✅ Incidents: GET/POST http://localhost:5001/api/incidents")
     print("✅ Anonymous Report: POST http://localhost:5001/api/incidents/anonymous")
     print("✅ Incident Stats: GET http://localhost:5001/api/incidents/stats")
+    print("👑 Admin - Get Users: GET http://localhost:5001/api/admin/users")
+    print("👑 Admin - Update Role: PATCH http://localhost:5001/api/admin/users/<id>/role")
     print("🔔 Notifications: GET http://localhost:5001/api/notifications")
     print("🔔 Mark Read: PUT http://localhost:5001/api/notifications/<id>/read")
     print("🔔 Mark All Read: PUT http://localhost:5001/api/notifications/read-all")

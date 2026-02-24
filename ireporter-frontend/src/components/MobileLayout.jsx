@@ -4,11 +4,20 @@ import MobileNav from './MobileNav';
 import PublicNav from './PublicNav';
 import FloatingActionButton from './FloatingActionButton';
 import NotificationBell from './NotificationBell';
+import UserMenu from './UserMenu';
 
 const MobileLayout = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [isMobile, setIsMobile] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    // Force re-mount when authentication changes
+    setMounted(false);
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timer);
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
     // Check if device is mobile
@@ -56,6 +65,16 @@ const MobileLayout = ({ children }) => {
     paddingTop: !isOnline ? '50px' : '0' // Space for offline banner
   };
 
+  const topBarStyle = {
+    position: 'fixed',
+    top: '20px',
+    right: '20px',
+    zIndex: 1500,
+    display: 'flex',
+    gap: '10px',
+    alignItems: 'center'
+  };
+
   return (
     <div style={layoutStyle}>
       {!isOnline && (
@@ -64,15 +83,11 @@ const MobileLayout = ({ children }) => {
         </div>
       )}
       
-      {/* Notification Bell - Fixed position for authenticated users */}
+      {/* Notification Bell and User Menu - Fixed position for authenticated users */}
       {isAuthenticated && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          zIndex: 1500
-        }}>
-          <NotificationBell />
+        <div style={topBarStyle} key="top-bar">
+          <NotificationBell key="notification-bell" />
+          <UserMenu key="user-menu" />
         </div>
       )}
       

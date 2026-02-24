@@ -20,7 +20,7 @@ if (typeof document !== 'undefined') {
 }
 
 const Dashboard = () => {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState({
     total: 0,
@@ -217,18 +217,6 @@ const Dashboard = () => {
     color: 'white'
   };
 
-  const logoutButtonStyle = {
-    padding: '12px 24px',
-    backgroundColor: '#dc3545',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
-    fontSize: '16px',
-    cursor: 'pointer',
-    transition: 'background-color 0.3s',
-    marginTop: '20px'
-  };
-
   if (loading) {
     return (
       <div style={containerStyle}>
@@ -261,7 +249,6 @@ const Dashboard = () => {
           </p>
           <p style={userInfoStyle}>
             Role: {isAdmin() ? '👑 Administrator' : '👤 Regular User'} | 
-            ID: {user?.id} | 
             Last login: {new Date().toLocaleDateString()}
             {isAdmin() && (
               <span style={{
@@ -283,7 +270,7 @@ const Dashboard = () => {
         <div style={statsGridStyle}>
           <div 
             style={{...statCardStyle, borderColor: '#667eea'}}
-            onClick={() => navigate('/incidents')}
+            onClick={() => navigate('/incidents?filter=all')}
             onMouseOver={(e) => {
               e.currentTarget.style.transform = 'translateY(-5px)';
               e.currentTarget.style.boxShadow = '0 15px 30px rgba(0,0,0,0.15)';
@@ -299,7 +286,7 @@ const Dashboard = () => {
 
           <div 
             style={{...statCardStyle, borderColor: '#ffc107'}}
-            onClick={() => navigate('/incidents')}
+            onClick={() => navigate('/incidents?filter=pending')}
             onMouseOver={(e) => {
               e.currentTarget.style.transform = 'translateY(-5px)';
               e.currentTarget.style.boxShadow = '0 15px 30px rgba(0,0,0,0.15)';
@@ -315,7 +302,7 @@ const Dashboard = () => {
 
           <div 
             style={{...statCardStyle, borderColor: '#007bff'}}
-            onClick={() => navigate('/incidents')}
+            onClick={() => navigate('/incidents?filter=investigating')}
             onMouseOver={(e) => {
               e.currentTarget.style.transform = 'translateY(-5px)';
               e.currentTarget.style.boxShadow = '0 15px 30px rgba(0,0,0,0.15)';
@@ -331,7 +318,7 @@ const Dashboard = () => {
 
           <div 
             style={{...statCardStyle, borderColor: '#28a745'}}
-            onClick={() => navigate('/incidents')}
+            onClick={() => navigate('/incidents?filter=resolved')}
             onMouseOver={(e) => {
               e.currentTarget.style.transform = 'translateY(-5px)';
               e.currentTarget.style.boxShadow = '0 15px 30px rgba(0,0,0,0.15)';
@@ -347,7 +334,7 @@ const Dashboard = () => {
 
           <div 
             style={{...statCardStyle, borderColor: '#dc3545'}}
-            onClick={() => navigate('/incidents')}
+            onClick={() => navigate('/incidents?filter=redflag')}
             onMouseOver={(e) => {
               e.currentTarget.style.transform = 'translateY(-5px)';
               e.currentTarget.style.boxShadow = '0 15px 30px rgba(0,0,0,0.15)';
@@ -363,7 +350,7 @@ const Dashboard = () => {
 
           <div 
             style={{...statCardStyle, borderColor: '#17a2b8'}}
-            onClick={() => navigate('/incidents')}
+            onClick={() => navigate('/incidents?filter=intervention')}
             onMouseOver={(e) => {
               e.currentTarget.style.transform = 'translateY(-5px)';
               e.currentTarget.style.boxShadow = '0 15px 30px rgba(0,0,0,0.15)';
@@ -626,15 +613,6 @@ const Dashboard = () => {
               )}
             </div>
           </div>
-          
-          <button
-            onClick={logout}
-            style={logoutButtonStyle}
-            onMouseOver={(e) => e.target.style.backgroundColor = '#c82333'}
-            onMouseOut={(e) => e.target.style.backgroundColor = '#dc3545'}
-          >
-            🚪 Logout
-          </button>
         </div>
       </div>
     </div>

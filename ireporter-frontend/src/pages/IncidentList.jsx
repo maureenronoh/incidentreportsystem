@@ -1,18 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { incidentService } from '../services/incidentService';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 
 const IncidentList = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAdmin, user } = useAuth();
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
 
   useEffect(() => {
+    // Get filter from URL query parameter
+    const params = new URLSearchParams(location.search);
+    const filterParam = params.get('filter');
+    if (filterParam) {
+      setFilter(filterParam);
+    }
+  }, [location.search]);
+
+  useEffect(() => {
     fetchIncidents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchIncidents = async () => {
@@ -257,19 +268,67 @@ const IncidentList = () => {
           </div>
         </div>
 
-        <div style={filterStyle}>
-          {['all', 'redflag', 'intervention', 'pending', 'investigating', 'resolved', 'rejected'].map(filterType => (
+        {/* Active Filter Display */}
+        {filter !== 'all' && (
+          <div style={{
+            backgroundColor: '#e7f3ff',
+            border: '2px solid #667eea',
+            borderRadius: '8px',
+            padding: '12px 20px',
+            marginBottom: '20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '16px', fontWeight: '600', color: '#667eea' }}>
+                🔍 Filtered by: {
+                  filter === 'redflag' ? '🚩 Red Flag' :
+                  filter === 'intervention' ? '🔧 Intervention' :
+                  filter.charAt(0).toUpperCase() + filter.slice(1)
+                }
+              </span>
+              <span style={{ fontSize: '14px', color: '#666' }}>
+                ({filteredIncidents.length} {filteredIncidents.length === 1 ? 'incident' : 'incidents'})
+              </span>
+            </div>
             <button
-              key={filterType}
-              onClick={() => setFilter(filterType)}
-              style={filter === filterType ? activeFilterStyle : inactiveFilterStyle}
+              onClick={() => setFilter('all')}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: '#dc3545',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: 'pointer'
+              }}
             >
-              {filterType === 'all' ? 'All' : 
-               filterType === 'redflag' ? '🚩 Red Flag' :
-               filterType === 'intervention' ? '🔧 Intervention' :
-               filterType.charAt(0).toUpperCase() + filterType.slice(1)}
+              ✕ Clear Filter
             </button>
-          ))}
+          </div>
+        )}
+
+        <div style={filterStyle}>
+          {['all', 'redflag', 'intervention', 'pending', 'investigating', 'resolved', 'rejected'].map(filterType => {
+            const count = filterType === 'all' 
+              ? incidents.length 
+              : incidents.filter(i => i.type?.toLowerCase() === filterType || i.status?.toLowerCase() === filterType).length;
+            
+            return (
+              <button
+                key={filterType}
+                onClick={() => setFilter(filterType)}
+                style={filter === filterType ? activeFilterStyle : inactiveFilterStyle}
+              >
+                {filterType === 'all' ? `All (${count})` : 
+                 filterType === 'redflag' ? `🚩 Red Flag (${count})` :
+                 filterType === 'intervention' ? `🔧 Intervention (${count})` :
+                 `${filterType.charAt(0).toUpperCase() + filterType.slice(1)} (${count})`}
+              </button>
+            );
+          })}
         </div>
 
         {filteredIncidents.length === 0 ? (
