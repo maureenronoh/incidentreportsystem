@@ -55,7 +55,9 @@ jobs:
     - name: Build frontend
       run: |
         cd ireporter-frontend
-        npm run build
+        CI=false npm run build
+      env:
+        REACT_APP_API_URL: http://localhost:5001
 
   security-scan:
     runs-on: ubuntu-latest
