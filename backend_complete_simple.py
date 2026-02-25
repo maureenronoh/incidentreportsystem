@@ -26,7 +26,20 @@ jwt = JWTManager(app)
 MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://localhost:27017/ireporter')
 
 try:
-    client = MongoClient(MONGODB_URI)
+    # Configure MongoDB client with SSL/TLS settings for Atlas
+    if 'mongodb+srv' in MONGODB_URI or 'mongodb.net' in MONGODB_URI:
+        # MongoDB Atlas connection with SSL
+        client = MongoClient(
+            MONGODB_URI,
+            tls=True,
+            tlsAllowInvalidCertificates=True,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=10000
+        )
+    else:
+        # Local MongoDB connection
+        client = MongoClient(MONGODB_URI)
+    
     db = client.ireporter
     users_collection = db.users
     incidents_collection = db.incidents
@@ -35,7 +48,7 @@ try:
     # Test connection
     client.admin.command('ping')
     print("✅ MongoDB connection successful!")
-    print(f"📊 Connected to: {MONGODB_URI.split('@')[1] if '@' in MONGODB_URI else 'localhost'}")
+    print(f"� Connected to: {MONGODB_URI.split('@')[1] if '@' in MONGODB_URI else 'localhost'}")
     
 except Exception as e:
     print(f"❌ MongoDB connection failed: {e}")
