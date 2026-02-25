@@ -22,8 +22,11 @@ app.config["JWT_SECRET_KEY"] = 'test-secret-key'
 jwt = JWTManager(app)
 
 # MongoDB configuration
+# Use environment variable for MongoDB URI, fallback to localhost for development
+MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://localhost:27017/ireporter')
+
 try:
-    client = MongoClient('mongodb://localhost:27017/ireporter')
+    client = MongoClient(MONGODB_URI)
     db = client.ireporter
     users_collection = db.users
     incidents_collection = db.incidents
@@ -32,9 +35,11 @@ try:
     # Test connection
     client.admin.command('ping')
     print("✅ MongoDB connection successful!")
+    print(f"📊 Connected to: {MONGODB_URI.split('@')[1] if '@' in MONGODB_URI else 'localhost'}")
     
 except Exception as e:
     print(f"❌ MongoDB connection failed: {e}")
+    print(f"🔍 Attempted connection to: {MONGODB_URI.split('@')[1] if '@' in MONGODB_URI else MONGODB_URI}")
     exit(1)
 
 def hash_password(password):
