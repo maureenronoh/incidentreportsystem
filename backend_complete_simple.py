@@ -28,20 +28,8 @@ print(f"🔍 MongoDB URI configured: {'Atlas (cloud)' if 'mongodb.net' in MONGOD
 print(f"🔍 Environment check - MONGODB_URI exists: {bool(os.environ.get('MONGODB_URI'))}")
 
 try:
-    # Configure MongoDB client with SSL/TLS settings for Atlas
-    if 'mongodb+srv' in MONGODB_URI or 'mongodb.net' in MONGODB_URI:
-        # MongoDB Atlas connection - simplified SSL settings
-        from ssl import CERT_NONE
-        client = MongoClient(
-            MONGODB_URI,
-            ssl=True,
-            ssl_cert_reqs=CERT_NONE,
-            serverSelectionTimeoutMS=10000,
-            connectTimeoutMS=20000
-        )
-    else:
-        # Local MongoDB connection
-        client = MongoClient(MONGODB_URI)
+    # Simple MongoDB connection - Atlas handles SSL automatically via connection string
+    client = MongoClient(MONGODB_URI)
     
     db = client.ireporter
     users_collection = db.users
