@@ -23,7 +23,7 @@ jwt = JWTManager(app)
 
 # MongoDB configuration
 # Use environment variable for MongoDB URI, fallback to localhost for development
-MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://localhost:27017/ireporter')
+MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb+srv://ireporter_user:<Sqe6BV6wJQPR4ve6>@cluster0.rbc4new.mongodb.net/')
 
 try:
     client = MongoClient(MONGODB_URI)
