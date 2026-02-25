@@ -21,7 +21,7 @@ const EditIncident = () => {
 
   useEffect(() => {
     fetchIncident();
-  }, [id]);
+  },  [fetchIncident, id]);
 
   const fetchIncident = async () => {
     try {
