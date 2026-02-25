@@ -1,3 +1,0 @@
-"""
-iReporter Test Suite
-"""
