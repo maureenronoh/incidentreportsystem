@@ -24,6 +24,8 @@ jwt = JWTManager(app)
 # MongoDB configuration
 # Use environment variable for MongoDB URI, fallback to localhost for development
 MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://localhost:27017/ireporter')
+print(f"🔍 MongoDB URI configured: {'Atlas (cloud)' if 'mongodb.net' in MONGODB_URI else 'localhost'}")
+print(f"🔍 Environment check - MONGODB_URI exists: {bool(os.environ.get('MONGODB_URI'))}")
 
 try:
     # Configure MongoDB client with SSL/TLS settings for Atlas
