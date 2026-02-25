@@ -30,14 +30,14 @@ print(f"🔍 Environment check - MONGODB_URI exists: {bool(os.environ.get('MONGO
 try:
     # Configure MongoDB client with SSL/TLS settings for Atlas
     if 'mongodb+srv' in MONGODB_URI or 'mongodb.net' in MONGODB_URI:
-        # MongoDB Atlas connection - use ssl parameter instead of tls for older pymongo
+        # MongoDB Atlas connection - simplified SSL settings
+        from ssl import CERT_NONE
         client = MongoClient(
             MONGODB_URI,
             ssl=True,
-            ssl_cert_reqs='CERT_NONE',
+            ssl_cert_reqs=CERT_NONE,
             serverSelectionTimeoutMS=10000,
-            connectTimeoutMS=20000,
-            retryWrites=True
+            connectTimeoutMS=20000
         )
     else:
         # Local MongoDB connection
