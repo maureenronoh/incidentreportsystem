@@ -12,6 +12,11 @@ const MobileLayout = ({ children }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [mounted, setMounted] = useState(false);
 
+import { useRef, useEffect } from 'react';
+const mounted = useRef(true);
+useEffect(() => {
+  return () => { mounted.current = false; };
+}, []);
   useEffect(() => {
     // Force re-mount when authentication changes
     setMounted(false);
