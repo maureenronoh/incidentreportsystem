@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import QuickHelp from '../components/QuickHelp';
+import api from '../services/api';
 
 const Login = () => {
   const { login } = useAuth();
@@ -57,17 +58,9 @@ const Login = () => {
     setAnonymousLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5001/api/incidents/anonymous', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(anonymousData)
-      });
+      const response = await api.post('/incidents/anonymous', anonymousData);
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (response.status === 201) {
         toast.success('Incident reported successfully! Thank you for your report.');
         setAnonymousData({
           title: '',
@@ -81,12 +74,10 @@ const Login = () => {
         setTimeout(() => {
           toast.info('To track your incident progress, please register/login with the email you provided.');
         }, 2000);
-      } else {
-        toast.error(data.error || 'Failed to submit report');
       }
     } catch (error) {
       console.error('Error submitting report:', error);
-      toast.error('Failed to submit report. Please try again.');
+      toast.error(error.response?.data?.error || 'Failed to submit report. Please try again.');
     } finally {
       setAnonymousLoading(false);
     }
