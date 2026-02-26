@@ -10,14 +10,6 @@ const MobileLayout = ({ children }) => {
   const { isAuthenticated, user } = useAuth();
   const [isMobile, setIsMobile] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    // Force re-mount when authentication changes
-    setMounted(false);
-    const timer = setTimeout(() => setMounted(true), 0);
-    return () => clearTimeout(timer);
-  }, [isAuthenticated, user]);
 
   useEffect(() => {
     // Check if device is mobile

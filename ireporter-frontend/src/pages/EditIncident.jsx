@@ -20,34 +20,37 @@ const EditIncident = () => {
   });
 
   useEffect(() => {
-    fetchIncident();
-  },  [fetchIncident, id]);
+    const fetchIncident = async () => {
+      try {
+        const response = await incidentService.getIncidentById(id);
+        const incidentData = response.data;
+        
+        // Check if user can edit this incident
+        if (incidentData.user_id !== user?.id && !isAdmin()) {
+          toast.error('You can only edit your own incidents');
+          navigate('/incidents');
+          return;
+        }
 
-  const fetchIncident = async () => {
-    try {
-      const response = await incidentService.getIncidentById(id);
-      const incidentData = response.data;
-      
-      // Check if user can edit this incident
-      if (incidentData.user_id !== user?.id && !isAdmin()) {
-        toast.error('You can only edit your own incidents');
+        setIncident(incidentData);
+        setFormData({
+          title: incidentData.title || '',
+          description: incidentData.description || '',
+          type: incidentData.type || 'redflag',
+          location: incidentData.location || '',
+          media: null
+        });
+      } catch (error) {
+        console.error('Error fetching incident:', error);
+        toast.error('Failed to load incident');
         navigate('/incidents');
-        return;
+      } finally {
+        setLoading(false);
       }
+    };
 
-      setIncident(incidentData);
-      setFormData({
-        title: incidentData.title || '',
-        description: incidentData.description || '',
-        type: incidentData.type || 'redflag',
-        location: incidentData.location || '',
-        media: null
-      });
-    } catch (error) {
-      console.error('Error fetching incident:', error);
-      toast.error('Failed to load incident');
-      navigate('/incidents');
-    } finally {
+    fetchIncident();
+  }, [id, user, isAdmin, navigate]);
       setLoading(false);
     }
   };

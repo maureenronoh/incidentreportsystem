@@ -12,27 +12,29 @@ const ViewIncident = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchIncident();
-  }, [id]);
+    const fetchIncident = async () => {
+      try {
+        const response = await incidentService.getIncidentById(id);
+        setIncident(response.data);
+      } catch (error) {
+        console.error('Error fetching incident:', error);
+        toast.error('Failed to load incident');
+        navigate('/incidents');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const fetchIncident = async () => {
-    try {
-      const response = await incidentService.getIncidentById(id);
-      setIncident(response.data);
-    } catch (error) {
-      console.error('Error fetching incident:', error);
-      toast.error('Failed to load incident');
-      navigate('/incidents');
-    } finally {
-      setLoading(false);
-    }
-  };
+    fetchIncident();
+  }, [id, navigate]);
 
   const handleStatusUpdate = async (newStatus) => {
     try {
       await incidentService.updateIncidentStatus(id, newStatus);
       toast.success('Status updated successfully');
-      fetchIncident();
+      // Refresh incident data
+      const response = await incidentService.getIncidentById(id);
+      setIncident(response.data);
     } catch (error) {
       console.error('Error updating status:', error);
       toast.error('Failed to update status');
