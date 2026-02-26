@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import QuickHelp from '../components/QuickHelp';
 
 const AnonymousReport = () => {
-  const navigate = useNavigate();
+  //const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
