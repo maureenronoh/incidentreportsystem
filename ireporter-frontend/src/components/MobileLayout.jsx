@@ -7,7 +7,7 @@ import NotificationBell from './NotificationBell';
 import UserMenu from './UserMenu';
 
 const MobileLayout = ({ children }) => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [isMobile, setIsMobile] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
