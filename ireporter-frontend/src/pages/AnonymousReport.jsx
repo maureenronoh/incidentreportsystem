@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import QuickHelp from '../components/QuickHelp';
+import api from '../services/api';
 
 const AnonymousReport = () => {
   //const navigate = useNavigate();
@@ -27,17 +28,9 @@ const AnonymousReport = () => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/incidents/anonymous', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
-      });
+      const response = await api.post('/incidents/anonymous', formData);
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (response.status === 201) {
         toast.success('Incident reported successfully! Thank you for your report.');
         setFormData({
           title: '',
@@ -48,16 +41,13 @@ const AnonymousReport = () => {
           reporter_email: ''
         });
         
-        // Show success message with tracking info
         setTimeout(() => {
           toast.info('To track your incident progress, please register/login with the email you provided.');
         }, 2000);
-      } else {
-        toast.error(data.error || 'Failed to submit report');
       }
     } catch (error) {
       console.error('Error submitting report:', error);
-      toast.error('Failed to submit report. Please try again.');
+      toast.error(error.response?.data?.error || 'Failed to submit report. Please try again.');
     } finally {
       setLoading(false);
     }
