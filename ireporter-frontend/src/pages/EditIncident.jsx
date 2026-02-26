@@ -51,9 +51,6 @@ const EditIncident = () => {
 
     fetchIncident();
   }, [id, user, isAdmin, navigate]);
-      setLoading(false);
-    }
-  };
 
   const handleChange = (e) => {
     if (e.target.name === 'media') {
