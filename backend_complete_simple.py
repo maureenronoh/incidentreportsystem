@@ -18,8 +18,12 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Configure CORS
-CORS(app, origins="*", supports_credentials=False)
+# Configure CORS - Allow all origins for now, can be restricted later
+CORS(app, 
+     origins="*",
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+     supports_credentials=False)
 
 # JWT configuration
 app.config["JWT_SECRET_KEY"] = 'test-secret-key'
