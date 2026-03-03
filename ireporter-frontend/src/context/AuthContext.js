@@ -14,19 +14,31 @@ export const AuthProvider = ({ children }) => {
     const initializeAuth = async () => {
       const token = localStorage.getItem('token');
       
-      if (token) {
-        try {
-          const response = await userService.getCurrentUser();
-          setUser(response.data);
-        } catch (error) {
-          console.error('Auth verification failed:', error);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          setUser(null);
-        }
+      // If no token, just finish loading
+      if (!token) {
+        setLoading(false);
+        return;
       }
       
-      setLoading(false);
+      try {
+        // Add timeout to prevent infinite loading (10 seconds max)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
+        const response = await userService.getCurrentUser();
+        clearTimeout(timeoutId);
+        
+        setUser(response.data);
+      } catch (error) {
+        console.error('Auth verification failed:', error);
+        // Clear invalid/expired token
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setUser(null);
+      } finally {
+        // Always set loading to false
+        setLoading(false);
+      }
     };
 
     initializeAuth();
