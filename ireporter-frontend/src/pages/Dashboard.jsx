@@ -492,19 +492,19 @@ const Dashboard = () => {
                     <h4 style={{ margin: '0 0 5px 0', color: '#333' }}>{incident.title}</h4>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{ ...badgeStyle, backgroundColor: getTypeColor(incident.type) }}>
-                        {incident.type === 'redflag' ? '🚩 Red Flag' : '🔧 Intervention'}
+                        {incident.type === 'redflag' ? 'Red Flag' : 'Intervention'}
                       </span>
                       <span style={{ ...badgeStyle, backgroundColor: getStatusColor(incident.status) }}>
                         {incident.status?.charAt(0).toUpperCase() + incident.status?.slice(1)}
                       </span>
                     </div>
                   </div>
-                  <div style={{ fontSize: '12px', color: '#666', textAlign: 'right' }}>
-                    <div>📍 {incident.location}</div>
+                  <div style={{ fontSize: '13px', color: '#333', textAlign: 'right', fontWeight: '500' }}>
+                    <div style={{ marginBottom: '4px' }}>📍 {incident.location}</div>
                     <div>📅 {new Date(incident.created_at).toLocaleDateString()}</div>
                   </div>
                 </div>
-                <p style={{ color: '#666', margin: '10px 0 0 0', fontSize: '14px' }}>
+                <p style={{ color: '#333', margin: '10px 0 0 0', fontSize: '14px', lineHeight: '1.5' }}>
                   {incident.description?.substring(0, 100)}...
                 </p>
                 <button

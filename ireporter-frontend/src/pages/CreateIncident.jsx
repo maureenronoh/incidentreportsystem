@@ -334,7 +334,7 @@ const CreateIncident = () => {
           {/* Media Upload */}
           <div style={formGroupStyle}>
             <label style={labelStyle} htmlFor="media">
-              Evidence (Photo/Video)
+              Evidence (Photo/Video) - Coming Soon
             </label>
             <input
               id="media"
@@ -342,10 +342,11 @@ const CreateIncident = () => {
               type="file"
               accept="image/*,video/*"
               onChange={handleChange}
-              style={inputStyle}
+              style={{...inputStyle, opacity: 0.6, cursor: 'not-allowed'}}
+              disabled
             />
-            <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '5px' }}>
-              📎 Optional: Upload photos or videos as evidence
+            <div style={{ fontSize: '12px', color: '#dc3545', marginTop: '5px', fontWeight: '600' }}>
+              ⚠️ Image upload feature is currently under development. For now, please include image descriptions in the detailed description field.
             </div>
           </div>
 
