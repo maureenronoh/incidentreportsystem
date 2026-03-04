@@ -87,7 +87,6 @@ const MobileLayout = ({ children }) => {
         {children}
       </div>
       
-      {isMobile && isAuthenticated && <FloatingActionButton />}
       {isMobile && isAuthenticated && <MobileNav />}
       {isMobile && !isAuthenticated && <PublicNav />}
     </div>

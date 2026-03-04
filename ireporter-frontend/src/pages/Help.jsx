@@ -275,34 +275,45 @@ const Help = () => {
 
   const contentStyle = {
     display: 'flex',
-    minHeight: '600px'
+    minHeight: '600px',
+    flexDirection: window.innerWidth <= 768 ? 'column' : 'row'
   };
 
   const sidebarStyle = {
-    width: '300px',
+    width: window.innerWidth <= 768 ? '100%' : '300px',
     backgroundColor: '#f8f9fa',
-    borderRight: '1px solid #e9ecef',
-    padding: '20px 0'
+    borderRight: window.innerWidth <= 768 ? 'none' : '1px solid #e9ecef',
+    borderBottom: window.innerWidth <= 768 ? '1px solid #e9ecef' : 'none',
+    padding: '20px 0',
+    display: 'flex',
+    flexDirection: window.innerWidth <= 768 ? 'row' : 'column',
+    overflowX: window.innerWidth <= 768 ? 'auto' : 'visible',
+    gap: window.innerWidth <= 768 ? '10px' : '0'
   };
 
   const mainContentStyle = {
     flex: 1,
-    padding: '30px'
+    padding: window.innerWidth <= 768 ? '20px' : '30px'
   };
 
   const menuItemStyle = {
-    padding: '12px 20px',
+    padding: window.innerWidth <= 768 ? '10px 15px' : '12px 20px',
     cursor: 'pointer',
-    borderLeft: '4px solid transparent',
+    borderLeft: window.innerWidth <= 768 ? 'none' : '4px solid transparent',
+    borderBottom: window.innerWidth <= 768 ? '3px solid transparent' : 'none',
     transition: 'all 0.3s',
     fontSize: '14px',
-    color: '#555'
+    color: '#555',
+    whiteSpace: window.innerWidth <= 768 ? 'nowrap' : 'normal',
+    minWidth: window.innerWidth <= 768 ? 'auto' : 'unset',
+    textAlign: window.innerWidth <= 768 ? 'center' : 'left'
   };
 
   const activeMenuItemStyle = {
     ...menuItemStyle,
     backgroundColor: '#e3f2fd',
-    borderLeftColor: '#2196f3',
+    borderLeftColor: window.innerWidth <= 768 ? 'transparent' : '#2196f3',
+    borderBottomColor: window.innerWidth <= 768 ? '#2196f3' : 'transparent',
     color: '#1976d2',
     fontWeight: '600'
   };
