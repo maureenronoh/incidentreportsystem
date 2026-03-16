@@ -7,41 +7,30 @@ const AuthContext = createContext({});
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Load user from localStorage immediately - no waiting for API
+  const cachedUser = localStorage.getItem('user');
+  const [user, setUser] = useState(cachedUser ? JSON.parse(cachedUser) : null);
+  const [loading, setLoading] = useState(false); // Start as false - no blocking
 
   useEffect(() => {
-    const initializeAuth = async () => {
-      const token = localStorage.getItem('token');
-      
-      // If no token, just finish loading
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-      
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    // Verify token in background - don't block the UI
+    const verifyToken = async () => {
       try {
-        // Add timeout to prevent infinite loading (10 seconds max)
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        
         const response = await userService.getCurrentUser();
-        clearTimeout(timeoutId);
-        
         setUser(response.data);
+        localStorage.setItem('user', JSON.stringify(response.data));
       } catch (error) {
-        console.error('Auth verification failed:', error);
-        // Clear invalid/expired token
+        console.error('Token verification failed:', error);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setUser(null);
-      } finally {
-        // Always set loading to false
-        setLoading(false);
       }
     };
 
-    initializeAuth();
+    verifyToken();
   }, []);
 
   const login = async (email, password) => {
@@ -128,28 +117,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   if (loading) {
-    return (
-      <div style={{ 
-        minHeight: '100vh', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        fontSize: '18px',
-        color: '#666'
-      }}>
-        <div style={{
-          border: '4px solid #f3f3f3',
-          borderTop: '4px solid #3498db',
-          borderRadius: '50%',
-          width: '50px',
-          height: '50px',
-          animation: 'spin 2s linear infinite',
-          marginRight: '15px'
-        }}></div>
-        Loading...
-      </div>
-    );
-  };
+    return null; // Never blocks - loading is always false now
+  }
 
   return (
     <AuthContext.Provider value={value}>
