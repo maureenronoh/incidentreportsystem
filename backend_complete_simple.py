@@ -55,6 +55,7 @@ try:
         {"$set": {"is_admin": True}}
     )
     print("✅ Admin sync complete")
+    print("🚀 Backend v2.1 - Admin status endpoint active")
     
 except Exception as e:
     print(f"❌ MongoDB connection failed: {e}")
