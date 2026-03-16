@@ -695,24 +695,29 @@ def incident_detail(incident_id):
             
             # Admin can update status
             old_status = incident.get('status', 'pending')
-            if 'status' in data and current_user.get('is_admin', False):
-                if data['status'] in ['pending', 'investigating', 'resolved', 'rejected']:
-                    update_fields['status'] = data['status']
-                    
-                    # Create notification for incident owner if status changed
-                    if data['status'] != old_status and incident.get('user_id'):
-                        status_messages = {
-                            'investigating': f"Your incident '{incident.get('title', 'Untitled')}' is now under investigation.",
-                            'resolved': f"Your incident '{incident.get('title', 'Untitled')}' has been resolved!",
-                            'rejected': f"Your incident '{incident.get('title', 'Untitled')}' has been reviewed and rejected."
-                        }
-                        if data['status'] in status_messages:
-                            create_notification(
-                                str(incident.get('user_id')),
-                                str(incident['_id']),
-                                status_messages[data['status']],
-                                'status_update'
-                            )
+            if 'status' in data:
+                is_admin_user = current_user.get('role') == 'admin' or current_user.get('is_admin', False)
+                if is_admin_user:
+                    if data['status'] in ['pending', 'investigating', 'resolved', 'rejected']:
+                        update_fields['status'] = data['status']
+                        
+                        # Create notification for incident owner if status changed
+                        if data['status'] != old_status and incident.get('user_id'):
+                            status_messages = {
+                                'investigating': f"Your incident '{incident.get('title', 'Untitled')}' is now under investigation.",
+                                'resolved': f"Your incident '{incident.get('title', 'Untitled')}' has been resolved!",
+                                'rejected': f"Your incident '{incident.get('title', 'Untitled')}' has been reviewed and rejected.",
+                                'pending': f"Your incident '{incident.get('title', 'Untitled')}' status has been reset to pending."
+                            }
+                            if data['status'] in status_messages:
+                                create_notification(
+                                    str(incident.get('user_id')),
+                                    str(incident['_id']),
+                                    status_messages[data['status']],
+                                    'status_update'
+                                )
+                else:
+                    return jsonify({"error": "Admin access required to update status"}), 403
             
             update_fields['updated_at'] = datetime.datetime.now()
             
