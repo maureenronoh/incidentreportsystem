@@ -37,7 +37,8 @@ const ViewIncident = () => {
       setIncident(response.data);
     } catch (error) {
       console.error('Error updating status:', error);
-      toast.error('Failed to update status');
+      const msg = error.response?.data?.error || 'Failed to update status';
+      toast.error(msg);
     }
   };
 

@@ -26,7 +26,7 @@ CORS(app,
      supports_credentials=False)
 
 # JWT configuration
-app.config["JWT_SECRET_KEY"] = 'test-secret-key'
+app.config["JWT_SECRET_KEY"] = os.environ.get('JWT_SECRET_KEY', 'ireporter-secret-2024')
 jwt = JWTManager(app)
 
 # MongoDB configuration
@@ -346,6 +346,35 @@ def update_user_role(user_id):
         
     except Exception as e:
         print(f"Update user role error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/promote', methods=['POST', 'OPTIONS'])
+def promote_to_admin():
+    """Promote a user to admin using a secret key - for setup purposes"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    try:
+        data = request.get_json()
+        secret = data.get('secret', '')
+        email = data.get('email', '').strip().lower()
+        
+        # Use JWT secret as the promotion key
+        if secret != app.config['JWT_SECRET_KEY']:
+            return jsonify({"error": "Invalid secret"}), 403
+        
+        user = find_user_by_email(email)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        
+        users_collection.update_one(
+            {"_id": user['_id']},
+            {"$set": {"role": "admin", "is_admin": True}}
+        )
+        
+        return jsonify({"message": f"{email} has been promoted to admin"}), 200
+        
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/admin/incidents/<incident_id>/status', methods=['PATCH', 'OPTIONS'])

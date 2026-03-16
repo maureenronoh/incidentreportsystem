@@ -11,6 +11,7 @@
   [build.environment]
     # Don't treat warnings as errors during build
     CI = "false"
+    REACT_APP_API_URL = "https://incidentreportsystem-qtqz.onrender.com/api"
 
 # Redirect rules for React Router (SPA)
 [[redirects]]
