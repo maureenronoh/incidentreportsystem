@@ -31,9 +31,9 @@ export const incidentService = {
     return api.get('/incidents/stats');
   },
 
-  // Update incident status (admin only)
+  // Update incident status (admin only) - uses dedicated admin endpoint
   updateIncidentStatus: (id, status) => {
-    return api.put(`/incidents/${id}`, { status });
+    return api.patch(`/admin/incidents/${id}/status`, { status });
   },
 
   // Get incidents by type

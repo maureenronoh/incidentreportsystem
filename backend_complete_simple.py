@@ -47,7 +47,14 @@ try:
     # Test connection
     client.admin.command('ping')
     print("✅ MongoDB connection successful!")
-    print(f"� Connected to: {MONGODB_URI.split('@')[1] if '@' in MONGODB_URI else 'localhost'}")
+    print(f"🔗 Connected to: {MONGODB_URI.split('@')[1] if '@' in MONGODB_URI else 'localhost'}")
+    
+    # Sync: ensure all users with role='admin' also have is_admin=True
+    users_collection.update_many(
+        {"role": "admin", "is_admin": {"$ne": True}},
+        {"$set": {"is_admin": True}}
+    )
+    print("✅ Admin sync complete")
     
 except Exception as e:
     print(f"❌ MongoDB connection failed: {e}")
@@ -325,6 +332,12 @@ def update_user_role(user_id):
             {'$set': {'role': new_role}}
         )
         
+        # Also update is_admin flag to stay in sync
+        users_collection.update_one(
+            {"_id": ObjectId(user_id)},
+            {'$set': {'role': new_role, 'is_admin': new_role == 'admin'}}
+        )
+        
         return jsonify({
             "message": f"User role updated to {new_role}",
             "user_id": user_id,
@@ -333,6 +346,64 @@ def update_user_role(user_id):
         
     except Exception as e:
         print(f"Update user role error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/incidents/<incident_id>/status', methods=['PATCH', 'OPTIONS'])
+@jwt_required()
+def admin_update_incident_status(incident_id):
+    """Admin-only endpoint to update incident status"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    try:
+        current_user_id = get_jwt_identity()
+        current_user = find_user_by_id(current_user_id)
+        
+        if not current_user or current_user.get('role') != 'admin':
+            return jsonify({"error": "Admin access required"}), 403
+        
+        data = request.get_json()
+        if not data or 'status' not in data:
+            return jsonify({"error": "Status is required"}), 400
+        
+        new_status = data['status']
+        if new_status not in ['pending', 'investigating', 'resolved', 'rejected']:
+            return jsonify({"error": "Invalid status"}), 400
+        
+        if not ObjectId.is_valid(incident_id):
+            return jsonify({"error": "Invalid incident ID"}), 400
+        
+        incident = incidents_collection.find_one({"_id": ObjectId(incident_id)})
+        if not incident:
+            return jsonify({"error": "Incident not found"}), 404
+        
+        old_status = incident.get('status', 'pending')
+        
+        incidents_collection.update_one(
+            {"_id": ObjectId(incident_id)},
+            {"$set": {"status": new_status, "updated_at": datetime.datetime.now()}}
+        )
+        
+        # Notify incident owner if status changed
+        if new_status != old_status and incident.get('user_id'):
+            status_messages = {
+                'investigating': f"Your incident '{incident.get('title', 'Untitled')}' is now under investigation.",
+                'resolved': f"Your incident '{incident.get('title', 'Untitled')}' has been resolved!",
+                'rejected': f"Your incident '{incident.get('title', 'Untitled')}' has been reviewed and rejected.",
+                'pending': f"Your incident '{incident.get('title', 'Untitled')}' status has been reset to pending."
+            }
+            if new_status in status_messages:
+                create_notification(
+                    str(incident.get('user_id')),
+                    str(incident['_id']),
+                    status_messages[new_status],
+                    'status_update'
+                )
+        
+        return jsonify({"message": "Status updated successfully", "status": new_status}), 200
+        
+    except Exception as e:
+        print(f"Admin update status error: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/incidents', methods=['GET', 'POST', 'OPTIONS'])
@@ -730,6 +801,17 @@ def mark_all_notifications_read():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
+    
+    # Sync: ensure all users with role='admin' also have is_admin=True
+    try:
+        users_collection.update_many(
+            {"role": "admin", "is_admin": {"$ne": True}},
+            {"$set": {"is_admin": True}}
+        )
+        print("✅ Admin sync: is_admin flag synced for all admin users")
+    except Exception as e:
+        print(f"⚠️ Admin sync warning: {e}")
+    
     print("🚀 Starting Complete Simple iReporter Backend...")
     print(f"📡 API running on port: {port}")
     print("✅ Registration: POST /api/users/register")
@@ -739,6 +821,7 @@ if __name__ == '__main__':
     print("✅ Incident Stats: GET /api/incidents/stats")
     print("👑 Admin - Get Users: GET /api/admin/users")
     print("👑 Admin - Update Role: PATCH /api/admin/users/<id>/role")
+    print("👑 Admin - Update Status: PATCH /api/admin/incidents/<id>/status")
     print("🔔 Notifications: GET /api/notifications")
     print("🔔 Mark Read: PUT /api/notifications/<id>/read")
     print("🔔 Mark All Read: PUT /api/notifications/read-all")
