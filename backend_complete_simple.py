@@ -260,9 +260,16 @@ def get_current_user():
         if not user:
             return jsonify({"error": "User not found"}), 404
         
-        user_response = serialize_doc(user.copy())
-        if 'password' in user_response:
-            del user_response['password']
+        # Return same clean format as login endpoint
+        user_response = {
+            "id": str(user['_id']),
+            "name": user.get('name', ''),
+            "email": user.get('email', ''),
+            "role": user.get('role', 'user'),
+            "is_admin": user.get('role') == 'admin' or user.get('is_admin', False),
+            "email_verified": user.get('email_verified', False),
+            "created_at": user['created_at'].isoformat() if isinstance(user.get('created_at'), datetime.datetime) else user.get('created_at', '')
+        }
         
         return jsonify(user_response), 200
         

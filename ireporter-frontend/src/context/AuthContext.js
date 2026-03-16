@@ -20,13 +20,20 @@ export const AuthProvider = ({ children }) => {
     const verifyToken = async () => {
       try {
         const response = await userService.getCurrentUser();
-        setUser(response.data);
-        localStorage.setItem('user', JSON.stringify(response.data));
+        const freshUser = response.data;
+        // Make sure role/is_admin are present
+        setUser(freshUser);
+        localStorage.setItem('user', JSON.stringify(freshUser));
       } catch (error) {
-        console.error('Token verification failed:', error);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setUser(null);
+        // Only clear session on 401 (token truly invalid/expired)
+        // Don't clear on network errors or server errors
+        if (error.response?.status === 401) {
+          console.warn('Token expired, clearing session');
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setUser(null);
+        }
+        // Otherwise keep the cached user - server might just be slow/down
       }
     };
 
