@@ -10,7 +10,6 @@ from flask_sqlalchemy import SQLAlchemy
 import datetime
 import bcrypt
 import os
-import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -28,7 +27,6 @@ jwt = JWTManager(app)
 
 # PostgreSQL configuration
 DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql+pg8000://localhost/ireporter')
-# Render provides postgres:// — fix scheme and force pg8000 driver
 DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 if DATABASE_URL.startswith('postgresql://') and '+' not in DATABASE_URL.split('://')[0]:
     DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+pg8000://', 1)
@@ -42,15 +40,15 @@ db = SQLAlchemy(app)
 
 class User(db.Model):
     __tablename__ = 'users'
-    id            = db.Column(db.Integer, primary_key=True)
-    name          = db.Column(db.String(200), nullable=False)
-    email         = db.Column(db.String(200), unique=True, nullable=False)
-    password      = db.Column(db.LargeBinary, nullable=False)
-    role          = db.Column(db.String(20), default='user')
-    is_admin      = db.Column(db.Boolean, default=False)
+    id             = db.Column(db.Integer, primary_key=True)
+    name           = db.Column(db.String(200), nullable=False)
+    email          = db.Column(db.String(200), unique=True, nullable=False)
+    password       = db.Column(db.LargeBinary, nullable=False)
+    role           = db.Column(db.String(20), default='user')
+    is_admin       = db.Column(db.Boolean, default=False)
     email_verified = db.Column(db.Boolean, default=True)
-    created_at    = db.Column(db.DateTime, default=datetime.datetime.utcnow)
-    updated_at    = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    created_at     = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at     = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
     incidents     = db.relationship('Incident', backref='owner', lazy=True,
                                     foreign_keys='Incident.user_id')
@@ -73,7 +71,7 @@ class Incident(db.Model):
     id             = db.Column(db.Integer, primary_key=True)
     title          = db.Column(db.String(300), nullable=False)
     description    = db.Column(db.Text, nullable=False)
-    type           = db.Column(db.String(20), nullable=False)   # redflag | intervention
+    type           = db.Column(db.String(20), nullable=False)
     location       = db.Column(db.String(300), nullable=False)
     status         = db.Column(db.String(20), default='pending')
     user_id        = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -81,14 +79,10 @@ class Incident(db.Model):
     reporter_email = db.Column(db.String(200))
     is_anonymous   = db.Column(db.Boolean, default=False)
     media_url      = db.Column(db.String(500))
-    # AI fields
-    severity       = db.Column(db.String(20))   # low | medium | high | critical
-    ai_summary     = db.Column(db.Text)
-    ai_category    = db.Column(db.String(100))
     created_at     = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     updated_at     = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
-    def to_dict(self, user_name=None):
+    def to_dict(self):
         return {
             "id": self.id,
             "title": self.title,
@@ -101,10 +95,7 @@ class Incident(db.Model):
             "reporter_email": self.reporter_email,
             "is_anonymous": self.is_anonymous,
             "media_url": self.media_url,
-            "severity": self.severity,
-            "ai_summary": self.ai_summary,
-            "ai_category": self.ai_category,
-            "user_name": user_name or (self.owner.name if self.owner else self.reporter_name or 'Anonymous'),
+            "user_name": self.owner.name if self.owner else (self.reporter_name or 'Anonymous'),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -152,69 +143,9 @@ def create_notification(user_id, incident_id, message, notification_type='status
         )
         db.session.add(notif)
         db.session.commit()
-        print(f"✅ Notification created for user {user_id}: {message}")
     except Exception as e:
         db.session.rollback()
         print(f"❌ Error creating notification: {e}")
-
-
-def analyze_incident(title, description, incident_type, location):
-    """
-    Use OpenAI to classify severity, summarize, and categorize an incident.
-    Falls back gracefully if API key is not set.
-    """
-    OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
-    if not OPENAI_API_KEY:
-        print("⚠️  OPENAI_API_KEY not set — skipping AI analysis")
-        return None
-
-    try:
-        import urllib.request
-        prompt = f"""You are an incident analysis assistant for a civic reporting platform.
-Analyze this incident and respond ONLY with a valid JSON object, no extra text.
-
-Incident:
-- Title: {title}
-- Type: {incident_type}
-- Location: {location}
-- Description: {description}
-
-Respond with this exact JSON structure:
-{{
-  "severity": "low|medium|high|critical",
-  "ai_summary": "One sentence summary of the incident",
-  "ai_category": "e.g. Corruption, Infrastructure, Police Brutality, Environmental, Public Safety, Other"
-}}
-
-Severity guide:
-- low: minor issue, no immediate danger
-- medium: significant issue affecting a few people
-- high: serious issue affecting many people or involving violence
-- critical: life-threatening or large-scale corruption/emergency"""
-
-        payload = json.dumps({
-            "model": "gpt-3.5-turbo",
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.3,
-            "max_tokens": 150
-        }).encode('utf-8')
-
-        req = urllib.request.Request(
-            "https://api.openai.com/v1/chat/completions",
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {OPENAI_API_KEY}"
-            }
-        )
-        with urllib.request.urlopen(req, timeout=10) as response:
-            result = json.loads(response.read().decode('utf-8'))
-            content = result['choices'][0]['message']['content'].strip()
-            return json.loads(content)
-
-    except Exception as e:
-        print(f"⚠️  AI analysis failed: {e}")
-        return None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -222,7 +153,7 @@ Severity guide:
 @app.route('/')
 def home():
     return jsonify({
-        "message": "iReporter Backend API (PostgreSQL)",
+        "message": "iReporter Backend API",
         "status": "running",
         "endpoints": {
             "register": "POST /api/users/register",
@@ -248,15 +179,12 @@ def register():
 
         if not email or not password or not name:
             return jsonify({"error": "Name, email and password are required"}), 400
-
         if User.query.filter_by(email=email).first():
             return jsonify({"error": "User already exists"}), 400
 
         is_admin = User.query.count() == 0
-
         user = User(
-            name=name,
-            email=email,
+            name=name, email=email,
             password=hash_password(password),
             role='admin' if is_admin else 'user',
             is_admin=is_admin
@@ -274,7 +202,6 @@ def register():
 
     except Exception as e:
         db.session.rollback()
-        print(f"Registration error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -305,7 +232,6 @@ def login():
         }), 200
 
     except Exception as e:
-        print(f"Login error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -332,9 +258,7 @@ def get_all_users():
         current_user = User.query.get(int(get_jwt_identity()))
         if not current_user or current_user.role != 'admin':
             return jsonify({"error": "Admin access required"}), 403
-
-        users = User.query.all()
-        return jsonify([u.to_dict() for u in users]), 200
+        return jsonify([u.to_dict() for u in User.query.all()]), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -361,8 +285,8 @@ def update_user_role(user_id):
         target.role     = new_role
         target.is_admin = new_role == 'admin'
         db.session.commit()
-
         return jsonify({"message": f"User role updated to {new_role}", "user_id": user_id, "new_role": new_role}), 200
+
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -388,6 +312,7 @@ def promote_to_admin():
         user.is_admin = True
         db.session.commit()
         return jsonify({"message": f"{email} has been promoted to admin"}), 200
+
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -412,8 +337,8 @@ def admin_update_incident_status(incident_id):
         if not incident:
             return jsonify({"error": "Incident not found"}), 404
 
-        old_status       = incident.status
-        incident.status  = new_status
+        old_status      = incident.status
+        incident.status = new_status
         incident.updated_at = datetime.datetime.utcnow()
         db.session.commit()
 
@@ -428,6 +353,7 @@ def admin_update_incident_status(incident_id):
                 create_notification(incident.user_id, incident.id, msgs[new_status])
 
         return jsonify({"message": "Status updated successfully", "status": new_status}), 200
+
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -475,16 +401,6 @@ def incidents():
             )
             db.session.add(incident)
             db.session.commit()
-
-            # Run AI analysis
-            ai = analyze_incident(title, description, incident_type, location)
-            if ai:
-                incident.severity    = ai.get('severity')
-                incident.ai_summary  = ai.get('ai_summary')
-                incident.ai_category = ai.get('ai_category')
-                db.session.commit()
-                print(f"🤖 AI analysis: severity={incident.severity}, category={incident.ai_category}")
-
             return jsonify({"message": "Incident created successfully", "incident": incident.to_dict()}), 201
 
         except Exception as e:
@@ -520,15 +436,6 @@ def create_anonymous_incident():
         )
         db.session.add(incident)
         db.session.commit()
-
-        # Run AI analysis
-        ai = analyze_incident(title, description, incident_type, location)
-        if ai:
-            incident.severity    = ai.get('severity')
-            incident.ai_summary  = ai.get('ai_summary')
-            incident.ai_category = ai.get('ai_category')
-            db.session.commit()
-
         return jsonify({"message": "Anonymous incident reported successfully", "incident": incident.to_dict()}), 201
 
     except Exception as e:
@@ -621,66 +528,6 @@ def incident_detail(incident_id):
             return jsonify({"error": str(e)}), 500
 
 
-# ── AI endpoints ──────────────────────────────────────────────────────────────
-
-@app.route('/api/incidents/<int:incident_id>/analyze', methods=['POST'])
-@jwt_required()
-def reanalyze_incident(incident_id):
-    """Re-run AI analysis on an existing incident (admin only)"""
-    try:
-        current_user = User.query.get(int(get_jwt_identity()))
-        if not current_user or not current_user.is_admin:
-            return jsonify({"error": "Admin access required"}), 403
-
-        incident = Incident.query.get(incident_id)
-        if not incident:
-            return jsonify({"error": "Incident not found"}), 404
-
-        ai = analyze_incident(incident.title, incident.description, incident.type, incident.location)
-        if not ai:
-            return jsonify({"error": "AI analysis unavailable — check OPENAI_API_KEY"}), 503
-
-        incident.severity    = ai.get('severity')
-        incident.ai_summary  = ai.get('ai_summary')
-        incident.ai_category = ai.get('ai_category')
-        incident.updated_at  = datetime.datetime.utcnow()
-        db.session.commit()
-
-        return jsonify({
-            "message": "AI analysis complete",
-            "severity":    incident.severity,
-            "ai_summary":  incident.ai_summary,
-            "ai_category": incident.ai_category
-        }), 200
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/incidents/ai-stats', methods=['GET'])
-@jwt_required()
-def ai_stats():
-    """Breakdown of incidents by severity and AI category"""
-    try:
-        from sqlalchemy import func
-        severity_counts = db.session.query(
-            Incident.severity, func.count(Incident.id)
-        ).group_by(Incident.severity).all()
-
-        category_counts = db.session.query(
-            Incident.ai_category, func.count(Incident.id)
-        ).group_by(Incident.ai_category).all()
-
-        return jsonify({
-            "by_severity": {s or "unanalyzed": c for s, c in severity_counts},
-            "by_category": {cat or "unanalyzed": c for cat, c in category_counts}
-        }), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 # ── Notifications ─────────────────────────────────────────────────────────────
 
 @app.route('/api/notifications', methods=['GET'])
@@ -729,7 +576,6 @@ def mark_all_notifications_read():
 with app.app_context():
     db.create_all()
     print("✅ PostgreSQL tables ready")
-    # Sync admin flags
     User.query.filter_by(role='admin', is_admin=False).update({"is_admin": True})
     db.session.commit()
     print("✅ Admin sync complete")
