@@ -26,10 +26,11 @@ app.config["JWT_SECRET_KEY"] = os.environ.get('JWT_SECRET_KEY', 'ireporter-secre
 jwt = JWTManager(app)
 
 # PostgreSQL configuration
-DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://localhost/ireporter')
-# Render provides postgres:// but SQLAlchemy needs postgresql://
-if DATABASE_URL.startswith('postgres://'):
-    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql+pg8000://localhost/ireporter')
+# Render provides postgres:// — fix scheme and force pg8000 driver
+DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+if DATABASE_URL.startswith('postgresql://') and '+' not in DATABASE_URL.split('://')[0]:
+    DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+pg8000://', 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
