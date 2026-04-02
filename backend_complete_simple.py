@@ -1,133 +1,160 @@
 #!/usr/bin/env python3
 """
-Complete simple backend for iReporter with all dashboard endpoints
+iReporter Backend - PostgreSQL version
 """
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
-from pymongo import MongoClient
-from bson import ObjectId
+from flask_sqlalchemy import SQLAlchemy
 import datetime
 import bcrypt
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
 
-# Configure CORS - Allow all origins for now, can be restricted later
-CORS(app, 
+CORS(app,
      origins="*",
      allow_headers=["Content-Type", "Authorization"],
      methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
      supports_credentials=False)
 
-# JWT configuration
 app.config["JWT_SECRET_KEY"] = os.environ.get('JWT_SECRET_KEY', 'ireporter-secret-2024')
 jwt = JWTManager(app)
 
-# MongoDB configuration
-# Use environment variable for MongoDB URI, fallback to localhost for development
-MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://localhost:27017/ireporter')
-print(f"🔍 MongoDB URI configured: {'Atlas (cloud)' if 'mongodb.net' in MONGODB_URI else 'localhost'}")
-print(f"🔍 Environment check - MONGODB_URI exists: {bool(os.environ.get('MONGODB_URI'))}")
+# PostgreSQL configuration
+DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://localhost/ireporter')
+# Render provides postgres:// but SQLAlchemy needs postgresql://
+if DATABASE_URL.startswith('postgres://'):
+    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
-try:
-    # Simple MongoDB connection - Atlas handles SSL automatically via connection string
-    client = MongoClient(MONGODB_URI)
-    
-    db = client.ireporter
-    users_collection = db.users
-    incidents_collection = db.incidents
-    notifications_collection = db.notifications
-    
-    # Test connection
-    client.admin.command('ping')
-    print("✅ MongoDB connection successful!")
-    print(f"🔗 Connected to: {MONGODB_URI.split('@')[1] if '@' in MONGODB_URI else 'localhost'}")
-    
-    # Sync: ensure all users with role='admin' also have is_admin=True
-    users_collection.update_many(
-        {"role": "admin", "is_admin": {"$ne": True}},
-        {"$set": {"is_admin": True}}
-    )
-    print("✅ Admin sync complete")
-    print("🚀 Backend v2.1 - Admin status endpoint active")
-    
-except Exception as e:
-    print(f"❌ MongoDB connection failed: {e}")
-    print(f"🔍 Attempted connection to: {MONGODB_URI.split('@')[1] if '@' in MONGODB_URI else MONGODB_URI}")
-    exit(1)
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+
+# ── Models ────────────────────────────────────────────────────────────────────
+
+class User(db.Model):
+    __tablename__ = 'users'
+    id            = db.Column(db.Integer, primary_key=True)
+    name          = db.Column(db.String(200), nullable=False)
+    email         = db.Column(db.String(200), unique=True, nullable=False)
+    password      = db.Column(db.LargeBinary, nullable=False)
+    role          = db.Column(db.String(20), default='user')
+    is_admin      = db.Column(db.Boolean, default=False)
+    email_verified = db.Column(db.Boolean, default=True)
+    created_at    = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at    = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    incidents     = db.relationship('Incident', backref='owner', lazy=True,
+                                    foreign_keys='Incident.user_id')
+    notifications = db.relationship('Notification', backref='recipient', lazy=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "email": self.email,
+            "role": self.role,
+            "is_admin": self.is_admin,
+            "email_verified": self.email_verified,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class Incident(db.Model):
+    __tablename__ = 'incidents'
+    id             = db.Column(db.Integer, primary_key=True)
+    title          = db.Column(db.String(300), nullable=False)
+    description    = db.Column(db.Text, nullable=False)
+    type           = db.Column(db.String(20), nullable=False)   # redflag | intervention
+    location       = db.Column(db.String(300), nullable=False)
+    status         = db.Column(db.String(20), default='pending')
+    user_id        = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    reporter_name  = db.Column(db.String(200))
+    reporter_email = db.Column(db.String(200))
+    is_anonymous   = db.Column(db.Boolean, default=False)
+    media_url      = db.Column(db.String(500))
+    created_at     = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at     = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    def to_dict(self, user_name=None):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "description": self.description,
+            "type": self.type,
+            "location": self.location,
+            "status": self.status,
+            "user_id": self.user_id,
+            "reporter_name": self.reporter_name,
+            "reporter_email": self.reporter_email,
+            "is_anonymous": self.is_anonymous,
+            "media_url": self.media_url,
+            "user_name": user_name or (self.owner.name if self.owner else self.reporter_name or 'Anonymous'),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class Notification(db.Model):
+    __tablename__ = 'notifications'
+    id          = db.Column(db.Integer, primary_key=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    incident_id = db.Column(db.Integer)
+    message     = db.Column(db.Text, nullable=False)
+    type        = db.Column(db.String(50), default='status_update')
+    read        = db.Column(db.Boolean, default=False)
+    created_at  = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "incident_id": self.incident_id,
+            "message": self.message,
+            "type": self.type,
+            "read": self.read,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def hash_password(password):
-    """Hash password using bcrypt"""
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
 
 def check_password(password, hashed):
-    """Check password against hash"""
+    if isinstance(hashed, str):
+        hashed = hashed.encode('utf-8')
     return bcrypt.checkpw(password.encode('utf-8'), hashed)
 
-def find_user_by_email(email):
-    """Find user by email"""
-    return users_collection.find_one({"email": email.lower()})
-
-def find_user_by_id(user_id):
-    """Find user by ID"""
-    try:
-        if ObjectId.is_valid(user_id):
-            return users_collection.find_one({"_id": ObjectId(user_id)})
-        else:
-            # Fallback for integer IDs from migration
-            return users_collection.find_one({"legacy_id": int(user_id)})
-    except:
-        return None
-
-def serialize_doc(doc):
-    """Convert MongoDB document to JSON serializable format"""
-    if doc is None:
-        return None
-    
-    # Create a copy to avoid modifying the original
-    doc = dict(doc)
-    
-    if '_id' in doc:
-        doc['id'] = str(doc['_id'])
-        del doc['_id']
-    
-    # Convert all ObjectId and datetime objects
-    for key, value in doc.items():
-        if isinstance(value, ObjectId):
-            doc[key] = str(value)
-        elif isinstance(value, datetime.datetime):
-            doc[key] = value.isoformat()
-    
-    return doc
-
 def create_notification(user_id, incident_id, message, notification_type='status_update'):
-    """Create a notification for a user"""
     try:
-        notification = {
-            'user_id': user_id,
-            'incident_id': incident_id,
-            'message': message,
-            'type': notification_type,
-            'read': False,
-            'created_at': datetime.datetime.now()
-        }
-        result = notifications_collection.insert_one(notification)
+        notif = Notification(
+            user_id=int(user_id),
+            incident_id=int(incident_id) if incident_id else None,
+            message=message,
+            type=notification_type
+        )
+        db.session.add(notif)
+        db.session.commit()
         print(f"✅ Notification created for user {user_id}: {message}")
-        return result.inserted_id
     except Exception as e:
+        db.session.rollback()
         print(f"❌ Error creating notification: {e}")
-        return None
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route('/')
 def home():
     return jsonify({
-        "message": "iReporter Backend API (Complete Simple)",
+        "message": "iReporter Backend API (PostgreSQL)",
         "status": "running",
         "endpoints": {
             "register": "POST /api/users/register",
@@ -137,734 +164,430 @@ def home():
         }
     })
 
+
 @app.route('/api/users/register', methods=['POST', 'OPTIONS'])
 def register():
     if request.method == 'OPTIONS':
         return '', 200
-    
     try:
         data = request.get_json()
-        
         if not data:
             return jsonify({"error": "No data provided"}), 400
-        
-        email = data.get('email', '').strip().lower()
+
+        email    = data.get('email', '').strip().lower()
         password = data.get('password', '').strip()
-        name = data.get('name', '').strip()
-        
+        name     = data.get('name', '').strip()
+
         if not email or not password or not name:
             return jsonify({"error": "Name, email and password are required"}), 400
-        
-        if find_user_by_email(email):
+
+        if User.query.filter_by(email=email).first():
             return jsonify({"error": "User already exists"}), 400
-        
-        # First user is admin
-        user_count = users_collection.count_documents({})
-        is_admin = user_count == 0
-        
-        # Hash password
-        hashed_password = hash_password(password)
-        
-        new_user = {
-            "name": name,
-            "email": email,
-            "password": hashed_password,
-            "role": "admin" if is_admin else "user",
-            "is_admin": is_admin,
-            "email_verified": True,
-            "created_at": datetime.datetime.now(),
-            "updated_at": datetime.datetime.now()
-        }
-        
-        result = users_collection.insert_one(new_user)
-        
-        # Create response user object
-        user_response = {
-            "id": str(result.inserted_id),
-            "name": name,
-            "email": email,
-            "role": new_user["role"],
-            "is_admin": is_admin,
-            "email_verified": True,
-            "created_at": new_user["created_at"].isoformat()
-        }
-        
-        # Auto-login user
-        access_token = create_access_token(identity=str(result.inserted_id))
+
+        is_admin = User.query.count() == 0
+
+        user = User(
+            name=name,
+            email=email,
+            password=hash_password(password),
+            role='admin' if is_admin else 'user',
+            is_admin=is_admin
+        )
+        db.session.add(user)
+        db.session.commit()
+
+        token = create_access_token(identity=str(user.id))
         return jsonify({
             "message": "User registered and logged in successfully",
-            "user": user_response,
-            "token": access_token,
+            "user": user.to_dict(),
+            "token": token,
             "auto_login": True
         }), 201
-        
+
     except Exception as e:
+        db.session.rollback()
         print(f"Registration error: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/api/users/login', methods=['POST', 'OPTIONS'])
 def login():
     if request.method == 'OPTIONS':
         return '', 200
-    
     try:
         data = request.get_json()
-        
         if not data:
             return jsonify({"error": "No data provided"}), 400
-        
-        email = data.get('email', '').strip().lower()
+
+        email    = data.get('email', '').strip().lower()
         password = data.get('password', '').strip()
-        
+
         if not email or not password:
             return jsonify({"error": "Email and password are required"}), 400
-        
-        user = find_user_by_email(email)
-        
-        if not user:
+
+        user = User.query.filter_by(email=email).first()
+        if not user or not check_password(password, user.password):
             return jsonify({"error": "Invalid credentials"}), 401
-        
-        # Check password
-        if not check_password(password, user['password']):
-            return jsonify({"error": "Invalid credentials"}), 401
-        
-        access_token = create_access_token(identity=str(user['_id']))
-        
-        user_response = {
-            "id": str(user['_id']),
-            "name": user['name'],
-            "email": user['email'],
-            "role": user.get('role', 'user'),
-            "is_admin": user.get('is_admin', False),
-            "email_verified": user.get('email_verified', False),
-            "created_at": user['created_at'].isoformat() if isinstance(user['created_at'], datetime.datetime) else user['created_at']
-        }
-        
+
+        token = create_access_token(identity=str(user.id))
         return jsonify({
             "message": "Login successful",
-            "user": user_response,
-            "token": access_token
+            "user": user.to_dict(),
+            "token": token
         }), 200
-        
+
     except Exception as e:
         print(f"Login error: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/api/users/me', methods=['GET'])
 @jwt_required()
 def get_current_user():
     try:
-        current_user_id = get_jwt_identity()
-        user = find_user_by_id(current_user_id)
-        
+        user = User.query.get(int(get_jwt_identity()))
         if not user:
             return jsonify({"error": "User not found"}), 404
-        
-        # Return same clean format as login endpoint
-        user_response = {
-            "id": str(user['_id']),
-            "name": user.get('name', ''),
-            "email": user.get('email', ''),
-            "role": user.get('role', 'user'),
-            "is_admin": user.get('role') == 'admin' or user.get('is_admin', False),
-            "email_verified": user.get('email_verified', False),
-            "created_at": user['created_at'].isoformat() if isinstance(user.get('created_at'), datetime.datetime) else user.get('created_at', '')
-        }
-        
-        return jsonify(user_response), 200
-        
+        return jsonify(user.to_dict()), 200
     except Exception as e:
-        print(f"Get current user error: {e}")
         return jsonify({"error": str(e)}), 500
 
-# Admin endpoints
+
+# ── Admin ─────────────────────────────────────────────────────────────────────
+
 @app.route('/api/admin/users', methods=['GET', 'OPTIONS'])
 @jwt_required()
 def get_all_users():
     if request.method == 'OPTIONS':
         return '', 200
-    
     try:
-        current_user_id = get_jwt_identity()
-        current_user = find_user_by_id(current_user_id)
-        
-        # Check if user is admin
-        if not current_user or current_user.get('role') != 'admin':
+        current_user = User.query.get(int(get_jwt_identity()))
+        if not current_user or current_user.role != 'admin':
             return jsonify({"error": "Admin access required"}), 403
-        
-        # Get all users
-        users = list(users_collection.find())
-        
-        # Remove passwords and serialize
-        users_response = []
-        for user in users:
-            user_data = serialize_doc(user.copy())
-            if 'password' in user_data:
-                del user_data['password']
-            users_response.append(user_data)
-        
-        return jsonify(users_response), 200
-        
+
+        users = User.query.all()
+        return jsonify([u.to_dict() for u in users]), 200
     except Exception as e:
-        print(f"Get all users error: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/admin/users/<user_id>/role', methods=['PATCH', 'OPTIONS'])
+
+@app.route('/api/admin/users/<int:user_id>/role', methods=['PATCH', 'OPTIONS'])
 @jwt_required()
 def update_user_role(user_id):
     if request.method == 'OPTIONS':
         return '', 200
-    
     try:
-        current_user_id = get_jwt_identity()
-        current_user = find_user_by_id(current_user_id)
-        
-        # Check if user is admin
-        if not current_user or current_user.get('role') != 'admin':
+        current_user = User.query.get(int(get_jwt_identity()))
+        if not current_user or current_user.role != 'admin':
             return jsonify({"error": "Admin access required"}), 403
-        
-        data = request.get_json()
+
+        data     = request.get_json()
         new_role = data.get('role')
-        
         if new_role not in ['user', 'admin']:
-            return jsonify({"error": "Invalid role. Must be 'user' or 'admin'"}), 400
-        
-        # Find user to update
-        user_to_update = find_user_by_id(user_id)
-        if not user_to_update:
+            return jsonify({"error": "Invalid role"}), 400
+
+        target = User.query.get(user_id)
+        if not target:
             return jsonify({"error": "User not found"}), 404
-        
-        # Update user role
-        users_collection.update_one(
-            {'_id': ObjectId(user_id)},
-            {'$set': {'role': new_role}}
-        )
-        
-        # Also update is_admin flag to stay in sync
-        users_collection.update_one(
-            {"_id": ObjectId(user_id)},
-            {'$set': {'role': new_role, 'is_admin': new_role == 'admin'}}
-        )
-        
-        return jsonify({
-            "message": f"User role updated to {new_role}",
-            "user_id": user_id,
-            "new_role": new_role
-        }), 200
-        
+
+        target.role     = new_role
+        target.is_admin = new_role == 'admin'
+        db.session.commit()
+
+        return jsonify({"message": f"User role updated to {new_role}", "user_id": user_id, "new_role": new_role}), 200
     except Exception as e:
-        print(f"Update user role error: {e}")
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/api/admin/promote', methods=['POST', 'OPTIONS'])
 def promote_to_admin():
-    """Promote a user to admin using a secret key - for setup purposes"""
     if request.method == 'OPTIONS':
         return '', 200
-    
     try:
-        data = request.get_json()
+        data   = request.get_json()
         secret = data.get('secret', '')
-        email = data.get('email', '').strip().lower()
-        
-        # Use JWT secret as the promotion key
+        email  = data.get('email', '').strip().lower()
+
         if secret != app.config['JWT_SECRET_KEY']:
             return jsonify({"error": "Invalid secret"}), 403
-        
-        user = find_user_by_email(email)
+
+        user = User.query.filter_by(email=email).first()
         if not user:
             return jsonify({"error": "User not found"}), 404
-        
-        users_collection.update_one(
-            {"_id": user['_id']},
-            {"$set": {"role": "admin", "is_admin": True}}
-        )
-        
+
+        user.role     = 'admin'
+        user.is_admin = True
+        db.session.commit()
         return jsonify({"message": f"{email} has been promoted to admin"}), 200
-        
     except Exception as e:
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/admin/incidents/<incident_id>/status', methods=['PATCH', 'OPTIONS'])
+
+@app.route('/api/admin/incidents/<int:incident_id>/status', methods=['PATCH', 'OPTIONS'])
 @jwt_required()
 def admin_update_incident_status(incident_id):
-    """Admin-only endpoint to update incident status"""
     if request.method == 'OPTIONS':
         return '', 200
-    
     try:
-        current_user_id = get_jwt_identity()
-        current_user = find_user_by_id(current_user_id)
-        
-        if not current_user or current_user.get('role') != 'admin':
+        current_user = User.query.get(int(get_jwt_identity()))
+        if not current_user or current_user.role != 'admin':
             return jsonify({"error": "Admin access required"}), 403
-        
-        data = request.get_json()
-        if not data or 'status' not in data:
-            return jsonify({"error": "Status is required"}), 400
-        
-        new_status = data['status']
+
+        data       = request.get_json()
+        new_status = data.get('status') if data else None
         if new_status not in ['pending', 'investigating', 'resolved', 'rejected']:
             return jsonify({"error": "Invalid status"}), 400
-        
-        if not ObjectId.is_valid(incident_id):
-            return jsonify({"error": "Invalid incident ID"}), 400
-        
-        incident = incidents_collection.find_one({"_id": ObjectId(incident_id)})
+
+        incident = Incident.query.get(incident_id)
         if not incident:
             return jsonify({"error": "Incident not found"}), 404
-        
-        old_status = incident.get('status', 'pending')
-        
-        incidents_collection.update_one(
-            {"_id": ObjectId(incident_id)},
-            {"$set": {"status": new_status, "updated_at": datetime.datetime.now()}}
-        )
-        
-        # Notify incident owner if status changed
-        if new_status != old_status and incident.get('user_id'):
-            status_messages = {
-                'investigating': f"Your incident '{incident.get('title', 'Untitled')}' is now under investigation.",
-                'resolved': f"Your incident '{incident.get('title', 'Untitled')}' has been resolved!",
-                'rejected': f"Your incident '{incident.get('title', 'Untitled')}' has been reviewed and rejected.",
-                'pending': f"Your incident '{incident.get('title', 'Untitled')}' status has been reset to pending."
+
+        old_status       = incident.status
+        incident.status  = new_status
+        incident.updated_at = datetime.datetime.utcnow()
+        db.session.commit()
+
+        if new_status != old_status and incident.user_id:
+            msgs = {
+                'investigating': f"Your incident '{incident.title}' is now under investigation.",
+                'resolved':      f"Your incident '{incident.title}' has been resolved!",
+                'rejected':      f"Your incident '{incident.title}' has been reviewed and rejected.",
+                'pending':       f"Your incident '{incident.title}' status has been reset to pending.",
             }
-            if new_status in status_messages:
-                create_notification(
-                    str(incident.get('user_id')),
-                    str(incident['_id']),
-                    status_messages[new_status],
-                    'status_update'
-                )
-        
+            if new_status in msgs:
+                create_notification(incident.user_id, incident.id, msgs[new_status])
+
         return jsonify({"message": "Status updated successfully", "status": new_status}), 200
-        
     except Exception as e:
-        print(f"Admin update status error: {e}")
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+
+# ── Incidents ─────────────────────────────────────────────────────────────────
 
 @app.route('/api/incidents', methods=['GET', 'POST', 'OPTIONS'])
 @jwt_required()
 def incidents():
     if request.method == 'OPTIONS':
         return '', 200
-    
-    current_user_id = get_jwt_identity()
-    current_user = find_user_by_id(current_user_id)
-    
+
+    current_user = User.query.get(int(get_jwt_identity()))
     if not current_user:
         return jsonify({"error": "User not found"}), 404
-    
+
     if request.method == 'GET':
         try:
-            # Get all incidents with user names
-            incidents_cursor = incidents_collection.find().sort("created_at", -1)
-            incidents_list = []
-            
-            for incident in incidents_cursor:
-                incident_dict = serialize_doc(incident)
-                
-                # Handle user name for both authenticated and anonymous incidents
-                if incident.get('user_id'):
-                    incident_user = find_user_by_id(str(incident.get('user_id')))
-                    incident_dict['user_name'] = incident_user['name'] if incident_user else 'Unknown'
-                    incident_dict['is_anonymous'] = incident.get('is_anonymous', False)
-                else:
-                    # Anonymous incident
-                    incident_dict['user_name'] = incident.get('reporter_name', 'Anonymous')
-                    incident_dict['is_anonymous'] = True
-                
-                incidents_list.append(incident_dict)
-            
-            return jsonify(incidents_list), 200
-            
+            all_incidents = Incident.query.order_by(Incident.created_at.desc()).all()
+            return jsonify([i.to_dict() for i in all_incidents]), 200
         except Exception as e:
-            print(f"Get incidents error: {e}")
             return jsonify({"error": str(e)}), 500
-    
+
     elif request.method == 'POST':
         try:
-            # Handle both JSON and form data
-            if request.is_json:
-                data = request.get_json()
-            else:
-                data = request.form.to_dict()
-            
+            data = request.get_json() if request.is_json else request.form.to_dict()
             if not data:
                 return jsonify({"error": "No data provided"}), 400
-            
-            title = data.get('title', '').strip()
-            description = data.get('description', '').strip()
+
+            title         = data.get('title', '').strip()
+            description   = data.get('description', '').strip()
             incident_type = data.get('type', '').strip()
-            location = data.get('location', '').strip()
-            
+            location      = data.get('location', '').strip()
+
             if not all([title, description, incident_type, location]):
                 return jsonify({"error": "Title, description, type, and location are required"}), 400
-            
             if incident_type not in ['redflag', 'intervention']:
                 return jsonify({"error": "Type must be 'redflag' or 'intervention'"}), 400
-            
-            new_incident = {
-                "title": title,
-                "description": description,
-                "type": incident_type,
-                "location": location,
-                "status": "pending",
-                "user_id": ObjectId(current_user_id),
-                "media_url": None,
-                "created_at": datetime.datetime.now(),
-                "updated_at": datetime.datetime.now()
-            }
-            
-            result = incidents_collection.insert_one(new_incident)
-            
-            # Return the created incident with proper serialization
-            created_incident = {
-                "id": str(result.inserted_id),
-                "title": title,
-                "description": description,
-                "type": incident_type,
-                "location": location,
-                "status": "pending",
-                "user_id": current_user_id,
-                "media_url": None,
-                "created_at": new_incident["created_at"].isoformat(),
-                "updated_at": new_incident["updated_at"].isoformat(),
-                "user_name": current_user['name']
-            }
-            
-            return jsonify({
-                "message": "Incident created successfully",
-                "incident": created_incident
-            }), 201
-            
+
+            incident = Incident(
+                title=title, description=description,
+                type=incident_type, location=location,
+                user_id=current_user.id
+            )
+            db.session.add(incident)
+            db.session.commit()
+            return jsonify({"message": "Incident created successfully", "incident": incident.to_dict()}), 201
+
         except Exception as e:
-            print(f"Create incident error: {e}")
+            db.session.rollback()
             return jsonify({"error": str(e)}), 500
+
 
 @app.route('/api/incidents/anonymous', methods=['POST', 'OPTIONS'])
 def create_anonymous_incident():
-    """Create incident without authentication"""
     if request.method == 'OPTIONS':
         return '', 200
-    
     try:
         data = request.get_json()
-        
         if not data:
             return jsonify({"error": "No data provided"}), 400
-        
-        title = data.get('title', '').strip()
-        description = data.get('description', '').strip()
+
+        title         = data.get('title', '').strip()
+        description   = data.get('description', '').strip()
         incident_type = data.get('type', '').strip()
-        location = data.get('location', '').strip()
-        reporter_email = data.get('reporter_email', '').strip()
-        reporter_name = data.get('reporter_name', '').strip()
-        
+        location      = data.get('location', '').strip()
+
         if not all([title, description, incident_type, location]):
             return jsonify({"error": "Title, description, type, and location are required"}), 400
-        
         if incident_type not in ['redflag', 'intervention']:
             return jsonify({"error": "Type must be 'redflag' or 'intervention'"}), 400
-        
-        new_incident = {
-            "title": title,
-            "description": description,
-            "type": incident_type,
-            "location": location,
-            "status": "pending",
-            "user_id": None,
-            "reporter_email": reporter_email.lower() if reporter_email else None,
-            "reporter_name": reporter_name if reporter_name else "Anonymous",
-            "is_anonymous": True,
-            "media_url": None,
-            "created_at": datetime.datetime.now(),
-            "updated_at": datetime.datetime.now()
-        }
-        
-        result = incidents_collection.insert_one(new_incident)
-        
-        created_incident = {
-            "id": str(result.inserted_id),
-            "title": title,
-            "description": description,
-            "type": incident_type,
-            "location": location,
-            "status": "pending",
-            "reporter_name": new_incident["reporter_name"],
-            "is_anonymous": True,
-            "media_url": None,
-            "created_at": new_incident["created_at"].isoformat(),
-            "updated_at": new_incident["updated_at"].isoformat()
-        }
-        
-        return jsonify({
-            "message": "Anonymous incident reported successfully",
-            "incident": created_incident
-        }), 201
-        
+
+        incident = Incident(
+            title=title, description=description,
+            type=incident_type, location=location,
+            reporter_name=data.get('reporter_name', '').strip() or 'Anonymous',
+            reporter_email=data.get('reporter_email', '').strip().lower() or None,
+            is_anonymous=True
+        )
+        db.session.add(incident)
+        db.session.commit()
+        return jsonify({"message": "Anonymous incident reported successfully", "incident": incident.to_dict()}), 201
+
     except Exception as e:
-        print(f"Anonymous incident creation error: {e}")
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/api/incidents/stats', methods=['GET'])
 @jwt_required()
 def incident_stats():
     try:
-        total = incidents_collection.count_documents({})
-        pending = incidents_collection.count_documents({"status": "pending"})
-        investigating = incidents_collection.count_documents({"status": "investigating"})
-        resolved = incidents_collection.count_documents({"status": "resolved"})
-        rejected = incidents_collection.count_documents({"status": "rejected"})
-        redflags = incidents_collection.count_documents({"type": "redflag"})
-        interventions = incidents_collection.count_documents({"type": "intervention"})
-        
-        stats = {
-            "total": total,
-            "pending": pending,
-            "investigating": investigating,
-            "resolved": resolved,
-            "rejected": rejected,
-            "redflags": redflags,
-            "interventions": interventions
-        }
-        
-        return jsonify(stats), 200
-        
+        return jsonify({
+            "total":         Incident.query.count(),
+            "pending":       Incident.query.filter_by(status='pending').count(),
+            "investigating": Incident.query.filter_by(status='investigating').count(),
+            "resolved":      Incident.query.filter_by(status='resolved').count(),
+            "rejected":      Incident.query.filter_by(status='rejected').count(),
+            "redflags":      Incident.query.filter_by(type='redflag').count(),
+            "interventions": Incident.query.filter_by(type='intervention').count(),
+        }), 200
     except Exception as e:
-        print(f"Get stats error: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/incidents/<incident_id>', methods=['GET', 'PUT', 'DELETE', 'OPTIONS'])
+
+@app.route('/api/incidents/<int:incident_id>', methods=['GET', 'PUT', 'DELETE', 'OPTIONS'])
 @jwt_required()
 def incident_detail(incident_id):
     if request.method == 'OPTIONS':
         return '', 200
-    
-    current_user_id = get_jwt_identity()
-    current_user = find_user_by_id(current_user_id)
-    
+
+    current_user = User.query.get(int(get_jwt_identity()))
     if not current_user:
         return jsonify({"error": "User not found"}), 404
-    
-    try:
-        if ObjectId.is_valid(incident_id):
-            incident = incidents_collection.find_one({"_id": ObjectId(incident_id)})
-        else:
-            incident = incidents_collection.find_one({"legacy_id": int(incident_id)})
-    except:
-        incident = None
-    
+
+    incident = Incident.query.get(incident_id)
     if not incident:
         return jsonify({"error": "Incident not found"}), 404
-    
+
     if request.method == 'GET':
-        try:
-            incident_dict = serialize_doc(incident)
-            
-            # Get user name
-            if incident.get('user_id'):
-                incident_user = find_user_by_id(str(incident.get('user_id')))
-                incident_dict['user_name'] = incident_user['name'] if incident_user else 'Unknown'
-            else:
-                incident_dict['user_name'] = incident.get('reporter_name', 'Anonymous')
-            
-            return jsonify(incident_dict), 200
-            
-        except Exception as e:
-            print(f"Get incident error: {e}")
-            return jsonify({"error": str(e)}), 500
-    
+        return jsonify(incident.to_dict()), 200
+
     elif request.method == 'PUT':
-        # Check if user can edit (owner or admin)
-        if str(incident.get('user_id', '')) != current_user_id and not current_user.get('is_admin', False):
+        if incident.user_id != current_user.id and not current_user.is_admin:
             return jsonify({"error": "Permission denied"}), 403
-        
         try:
-            if request.is_json:
-                data = request.get_json()
-            else:
-                data = request.form.to_dict()
-            
+            data = request.get_json() if request.is_json else request.form.to_dict()
             if not data:
                 return jsonify({"error": "No data provided"}), 400
-            
-            # Update incident fields
-            update_fields = {}
-            if 'title' in data:
-                update_fields['title'] = data['title'].strip()
-            if 'description' in data:
-                update_fields['description'] = data['description'].strip()
+
+            if 'title' in data:       incident.title       = data['title'].strip()
+            if 'description' in data: incident.description = data['description'].strip()
+            if 'location' in data:    incident.location    = data['location'].strip()
             if 'type' in data and data['type'] in ['redflag', 'intervention']:
-                update_fields['type'] = data['type']
-            if 'location' in data:
-                update_fields['location'] = data['location'].strip()
-            
-            # Admin can update status
-            old_status = incident.get('status', 'pending')
+                incident.type = data['type']
+
             if 'status' in data:
-                is_admin_user = current_user.get('role') == 'admin' or current_user.get('is_admin', False)
-                if is_admin_user:
-                    if data['status'] in ['pending', 'investigating', 'resolved', 'rejected']:
-                        update_fields['status'] = data['status']
-                        
-                        # Create notification for incident owner if status changed
-                        if data['status'] != old_status and incident.get('user_id'):
-                            status_messages = {
-                                'investigating': f"Your incident '{incident.get('title', 'Untitled')}' is now under investigation.",
-                                'resolved': f"Your incident '{incident.get('title', 'Untitled')}' has been resolved!",
-                                'rejected': f"Your incident '{incident.get('title', 'Untitled')}' has been reviewed and rejected.",
-                                'pending': f"Your incident '{incident.get('title', 'Untitled')}' status has been reset to pending."
-                            }
-                            if data['status'] in status_messages:
-                                create_notification(
-                                    str(incident.get('user_id')),
-                                    str(incident['_id']),
-                                    status_messages[data['status']],
-                                    'status_update'
-                                )
-                else:
+                if not current_user.is_admin:
                     return jsonify({"error": "Admin access required to update status"}), 403
-            
-            update_fields['updated_at'] = datetime.datetime.now()
-            
-            incidents_collection.update_one(
-                {"_id": incident['_id']},
-                {"$set": update_fields}
-            )
-            
-            # Get updated incident
-            updated_incident = incidents_collection.find_one({"_id": incident['_id']})
-            incident_dict = serialize_doc(updated_incident)
-            
-            return jsonify({
-                "message": "Incident updated successfully",
-                "incident": incident_dict
-            }), 200
-            
+                new_status = data['status']
+                if new_status in ['pending', 'investigating', 'resolved', 'rejected']:
+                    old_status      = incident.status
+                    incident.status = new_status
+                    if new_status != old_status and incident.user_id:
+                        msgs = {
+                            'investigating': f"Your incident '{incident.title}' is now under investigation.",
+                            'resolved':      f"Your incident '{incident.title}' has been resolved!",
+                            'rejected':      f"Your incident '{incident.title}' has been reviewed and rejected.",
+                            'pending':       f"Your incident '{incident.title}' status has been reset to pending.",
+                        }
+                        if new_status in msgs:
+                            create_notification(incident.user_id, incident.id, msgs[new_status])
+
+            incident.updated_at = datetime.datetime.utcnow()
+            db.session.commit()
+            return jsonify({"message": "Incident updated successfully", "incident": incident.to_dict()}), 200
+
         except Exception as e:
-            print(f"Update incident error: {e}")
-            return jsonify({"error": str(e)}), 500
-    
-    elif request.method == 'DELETE':
-        # Check if user can delete (owner or admin)
-        if str(incident.get('user_id', '')) != current_user_id and not current_user.get('is_admin', False):
-            return jsonify({"error": "Permission denied"}), 403
-        
-        try:
-            incidents_collection.delete_one({"_id": incident['_id']})
-            return jsonify({"message": "Incident deleted successfully"}), 200
-            
-        except Exception as e:
-            print(f"Delete incident error: {e}")
+            db.session.rollback()
             return jsonify({"error": str(e)}), 500
 
-# Notification endpoints
+    elif request.method == 'DELETE':
+        if incident.user_id != current_user.id and not current_user.is_admin:
+            return jsonify({"error": "Permission denied"}), 403
+        try:
+            db.session.delete(incident)
+            db.session.commit()
+            return jsonify({"message": "Incident deleted successfully"}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 500
+
+
+# ── Notifications ─────────────────────────────────────────────────────────────
+
 @app.route('/api/notifications', methods=['GET'])
 @jwt_required()
 def get_notifications():
-    """Get all notifications for the current user"""
     try:
-        current_user_id = get_jwt_identity()
-        
-        # Get all notifications for this user, sorted by newest first
-        notifications = list(notifications_collection.find(
-            {"user_id": current_user_id}
-        ).sort("created_at", -1))
-        
-        notifications_list = [serialize_doc(notif) for notif in notifications]
-        
-        # Count unread notifications
-        unread_count = notifications_collection.count_documents({
-            "user_id": current_user_id,
-            "read": False
-        })
-        
-        return jsonify({
-            "notifications": notifications_list,
-            "unread_count": unread_count
-        }), 200
-        
+        user_id = int(get_jwt_identity())
+        notifs  = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).all()
+        unread  = Notification.query.filter_by(user_id=user_id, read=False).count()
+        return jsonify({"notifications": [n.to_dict() for n in notifs], "unread_count": unread}), 200
     except Exception as e:
-        print(f"Get notifications error: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/notifications/<notification_id>/read', methods=['PUT'])
+
+@app.route('/api/notifications/<int:notification_id>/read', methods=['PUT'])
 @jwt_required()
 def mark_notification_read(notification_id):
-    """Mark a notification as read"""
     try:
-        current_user_id = get_jwt_identity()
-        
-        if not ObjectId.is_valid(notification_id):
-            return jsonify({"error": "Invalid notification ID"}), 400
-        
-        # Find notification
-        notification = notifications_collection.find_one({
-            "_id": ObjectId(notification_id),
-            "user_id": current_user_id
-        })
-        
-        if not notification:
+        user_id = int(get_jwt_identity())
+        notif   = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
+        if not notif:
             return jsonify({"error": "Notification not found"}), 404
-        
-        # Mark as read
-        notifications_collection.update_one(
-            {"_id": ObjectId(notification_id)},
-            {"$set": {"read": True}}
-        )
-        
+        notif.read = True
+        db.session.commit()
         return jsonify({"message": "Notification marked as read"}), 200
-        
     except Exception as e:
-        print(f"Mark notification read error: {e}")
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/api/notifications/read-all', methods=['PUT'])
 @jwt_required()
 def mark_all_notifications_read():
-    """Mark all notifications as read for the current user"""
     try:
-        current_user_id = get_jwt_identity()
-        
-        result = notifications_collection.update_many(
-            {"user_id": current_user_id, "read": False},
-            {"$set": {"read": True}}
-        )
-        
-        return jsonify({
-            "message": "All notifications marked as read",
-            "count": result.modified_count
-        }), 200
-        
+        user_id = int(get_jwt_identity())
+        count   = Notification.query.filter_by(user_id=user_id, read=False).update({"read": True})
+        db.session.commit()
+        return jsonify({"message": "All notifications marked as read", "count": count}), 200
     except Exception as e:
-        print(f"Mark all notifications read error: {e}")
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+
+# ── Startup ───────────────────────────────────────────────────────────────────
+
+with app.app_context():
+    db.create_all()
+    print("✅ PostgreSQL tables ready")
+    # Sync admin flags
+    User.query.filter_by(role='admin', is_admin=False).update({"is_admin": True})
+    db.session.commit()
+    print("✅ Admin sync complete")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
-    
-    # Sync: ensure all users with role='admin' also have is_admin=True
-    try:
-        users_collection.update_many(
-            {"role": "admin", "is_admin": {"$ne": True}},
-            {"$set": {"is_admin": True}}
-        )
-        print("✅ Admin sync: is_admin flag synced for all admin users")
-    except Exception as e:
-        print(f"⚠️ Admin sync warning: {e}")
-    
-    print("🚀 Starting Complete Simple iReporter Backend...")
-    print(f"📡 API running on port: {port}")
-    print("✅ Registration: POST /api/users/register")
-    print("✅ Login: POST /api/users/login")
-    print("✅ Incidents: GET/POST /api/incidents")
-    print("✅ Anonymous Report: POST /api/incidents/anonymous")
-    print("✅ Incident Stats: GET /api/incidents/stats")
-    print("👑 Admin - Get Users: GET /api/admin/users")
-    print("👑 Admin - Update Role: PATCH /api/admin/users/<id>/role")
-    print("👑 Admin - Update Status: PATCH /api/admin/incidents/<id>/status")
-    print("🔔 Notifications: GET /api/notifications")
-    print("🔔 Mark Read: PUT /api/notifications/<id>/read")
-    print("🔔 Mark All Read: PUT /api/notifications/read-all")
+    print(f"🚀 iReporter backend starting on port {port}")
     app.run(debug=False, port=port, host='0.0.0.0')
