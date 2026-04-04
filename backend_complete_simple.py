@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-iReporter Backend - PostgreSQL + SMTP + Media uploads
+iReporter Backend - PostgreSQL version
 """
 
 from flask import Flask, jsonify, request
@@ -10,11 +10,6 @@ from flask_sqlalchemy import SQLAlchemy
 import datetime
 import bcrypt
 import os
-import smtplib
-import secrets
-import string
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -30,7 +25,7 @@ CORS(app,
 app.config["JWT_SECRET_KEY"] = os.environ.get('JWT_SECRET_KEY', 'ireporter-secret-2024')
 jwt = JWTManager(app)
 
-# PostgreSQL
+# PostgreSQL configuration
 DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql+pg8000://localhost/ireporter')
 DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 if DATABASE_URL.startswith('postgresql://') and '+' not in DATABASE_URL.split('://')[0]:
@@ -38,18 +33,6 @@ if DATABASE_URL.startswith('postgresql://') and '+' not in DATABASE_URL.split(':
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Cloudinary config (set these in Render env vars)
-CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME')
-CLOUDINARY_API_KEY    = os.environ.get('CLOUDINARY_API_KEY')
-CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET')
-
-# SMTP config
-SMTP_HOST     = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
-SMTP_PORT     = int(os.environ.get('EMAIL_PORT', 587))
-SMTP_USER     = os.environ.get('EMAIL_USER', '')
-SMTP_PASSWORD = os.environ.get('EMAIL_PASSWORD', '')
-SMTP_FROM     = os.environ.get('EMAIL_FROM', SMTP_USER)
 
 db = SQLAlchemy(app)
 
@@ -95,8 +78,7 @@ class Incident(db.Model):
     reporter_name  = db.Column(db.String(200))
     reporter_email = db.Column(db.String(200))
     is_anonymous   = db.Column(db.Boolean, default=False)
-    # media stored as comma-separated Cloudinary URLs
-    media_urls     = db.Column(db.Text)
+    media_url      = db.Column(db.String(500))
     created_at     = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     updated_at     = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
@@ -112,7 +94,7 @@ class Incident(db.Model):
             "reporter_name": self.reporter_name,
             "reporter_email": self.reporter_email,
             "is_anonymous": self.is_anonymous,
-            "media_urls": self.media_urls.split(',') if self.media_urls else [],
+            "media_url": self.media_url,
             "user_name": self.owner.name if self.owner else (self.reporter_name or 'Anonymous'),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
@@ -151,56 +133,6 @@ def check_password(password, hashed):
         hashed = hashed.encode('utf-8')
     return bcrypt.checkpw(password.encode('utf-8'), hashed)
 
-def generate_temp_password(length=10):
-    chars = string.ascii_letters + string.digits
-    return ''.join(secrets.choice(chars) for _ in range(length))
-
-def send_email(to_email, subject, body_html):
-    """Send email via SMTP. Returns True on success."""
-    if not SMTP_USER or not SMTP_PASSWORD:
-        print("⚠️  SMTP not configured — skipping email")
-        return False
-    try:
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = subject
-        msg['From']    = SMTP_FROM
-        msg['To']      = to_email
-        msg.attach(MIMEText(body_html, 'html'))
-
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(SMTP_FROM, to_email, msg.as_string())
-        print(f"✅ Email sent to {to_email}")
-        return True
-    except Exception as e:
-        print(f"❌ Email failed: {e}")
-        return False
-
-def upload_to_cloudinary(file):
-    """Upload a file to Cloudinary and return the secure URL."""
-    if not all([CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET]):
-        print("⚠️  Cloudinary not configured")
-        return None
-    try:
-        import cloudinary
-        import cloudinary.uploader
-        cloudinary.config(
-            cloud_name=CLOUDINARY_CLOUD_NAME,
-            api_key=CLOUDINARY_API_KEY,
-            api_secret=CLOUDINARY_API_SECRET
-        )
-        result = cloudinary.uploader.upload(
-            file,
-            resource_type='auto',   # handles images and videos
-            folder='ireporter'
-        )
-        return result.get('secure_url')
-    except Exception as e:
-        print(f"❌ Cloudinary upload failed: {e}")
-        return None
-
 def create_notification(user_id, incident_id, message, notification_type='status_update'):
     try:
         notif = Notification(
@@ -224,12 +156,10 @@ def home():
         "message": "iReporter Backend API",
         "status": "running",
         "endpoints": {
-            "register":       "POST /api/users/register",
-            "login":          "POST /api/users/login",
-            "forgot_password":"POST /api/users/forgot-password",
-            "incidents":      "GET /api/incidents",
-            "upload_media":   "POST /api/incidents/<id>/media",
-            "anonymous":      "POST /api/incidents/anonymous"
+            "register": "POST /api/users/register",
+            "login": "POST /api/users/login",
+            "incidents": "GET /api/incidents",
+            "anonymous": "POST /api/incidents/anonymous"
         }
     })
 
@@ -302,81 +232,6 @@ def login():
         }), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/users/forgot-password', methods=['POST', 'OPTIONS'])
-def forgot_password():
-    """Generate a temp password and email it to the user."""
-    if request.method == 'OPTIONS':
-        return '', 200
-    try:
-        data  = request.get_json()
-        email = data.get('email', '').strip().lower() if data else ''
-
-        if not email:
-            return jsonify({"error": "Email is required"}), 400
-
-        user = User.query.filter_by(email=email).first()
-        # Always return 200 to avoid email enumeration
-        if not user:
-            return jsonify({"message": "If that email exists, a password reset has been sent"}), 200
-
-        temp_password = generate_temp_password()
-        user.password  = hash_password(temp_password)
-        user.updated_at = datetime.datetime.utcnow()
-        db.session.commit()
-
-        body = f"""
-        <html><body>
-        <h2>iReporter Password Reset</h2>
-        <p>Hi {user.name},</p>
-        <p>Your temporary password is:</p>
-        <h3 style="background:#f4f4f4;padding:10px;letter-spacing:2px;">{temp_password}</h3>
-        <p>Please log in and change your password immediately.</p>
-        <p>— iReporter Team</p>
-        </body></html>
-        """
-        sent = send_email(email, "iReporter — Your Temporary Password", body)
-
-        if not sent:
-            return jsonify({
-                "message": "Password reset but email could not be sent. Contact admin.",
-                "temp_password": temp_password  # only shown if SMTP not configured
-            }), 200
-
-        return jsonify({"message": "Temporary password sent to your email"}), 200
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/users/change-password', methods=['POST', 'OPTIONS'])
-@jwt_required()
-def change_password():
-    """Allow logged-in user to change their password."""
-    if request.method == 'OPTIONS':
-        return '', 200
-    try:
-        data         = request.get_json()
-        old_password = data.get('old_password', '').strip()
-        new_password = data.get('new_password', '').strip()
-
-        if not old_password or not new_password:
-            return jsonify({"error": "old_password and new_password are required"}), 400
-
-        user = User.query.get(int(get_jwt_identity()))
-        if not check_password(old_password, user.password):
-            return jsonify({"error": "Current password is incorrect"}), 401
-
-        user.password   = hash_password(new_password)
-        user.updated_at = datetime.datetime.utcnow()
-        db.session.commit()
-        return jsonify({"message": "Password changed successfully"}), 200
-
-    except Exception as e:
-        db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
 
@@ -482,8 +337,8 @@ def admin_update_incident_status(incident_id):
         if not incident:
             return jsonify({"error": "Incident not found"}), 404
 
-        old_status          = incident.status
-        incident.status     = new_status
+        old_status      = incident.status
+        incident.status = new_status
         incident.updated_at = datetime.datetime.utcnow()
         db.session.commit()
 
@@ -496,14 +351,6 @@ def admin_update_incident_status(incident_id):
             }
             if new_status in msgs:
                 create_notification(incident.user_id, incident.id, msgs[new_status])
-                # Also email the user
-                owner = User.query.get(incident.user_id)
-                if owner:
-                    send_email(
-                        owner.email,
-                        f"iReporter — Incident Status Update",
-                        f"<html><body><p>Hi {owner.name},</p><p>{msgs[new_status]}</p><p>— iReporter Team</p></body></html>"
-                    )
 
         return jsonify({"message": "Status updated successfully", "status": new_status}), 200
 
@@ -559,56 +406,6 @@ def incidents():
         except Exception as e:
             db.session.rollback()
             return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/incidents/<int:incident_id>/media', methods=['POST', 'OPTIONS'])
-@jwt_required()
-def upload_incident_media(incident_id):
-    """Upload images/videos for an incident. Accepts multiple files."""
-    if request.method == 'OPTIONS':
-        return '', 200
-    try:
-        current_user = User.query.get(int(get_jwt_identity()))
-        incident     = Incident.query.get(incident_id)
-
-        if not incident:
-            return jsonify({"error": "Incident not found"}), 404
-        if incident.user_id != current_user.id and not current_user.is_admin:
-            return jsonify({"error": "Permission denied"}), 403
-
-        files = request.files.getlist('media')
-        if not files:
-            return jsonify({"error": "No files provided"}), 400
-
-        allowed = {'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-                   'video/mp4', 'video/quicktime', 'video/webm'}
-
-        uploaded_urls = []
-        for f in files:
-            if f.mimetype not in allowed:
-                return jsonify({"error": f"File type {f.mimetype} not allowed"}), 400
-            url = upload_to_cloudinary(f)
-            if url:
-                uploaded_urls.append(url)
-
-        if not uploaded_urls:
-            return jsonify({"error": "Upload failed — check Cloudinary configuration"}), 500
-
-        # Append to existing media
-        existing = incident.media_urls.split(',') if incident.media_urls else []
-        all_urls = existing + uploaded_urls
-        incident.media_urls  = ','.join(all_urls)
-        incident.updated_at  = datetime.datetime.utcnow()
-        db.session.commit()
-
-        return jsonify({
-            "message": f"{len(uploaded_urls)} file(s) uploaded successfully",
-            "media_urls": all_urls
-        }), 200
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/incidents/anonymous', methods=['POST', 'OPTIONS'])
